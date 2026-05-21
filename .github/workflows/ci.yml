@@ -23,8 +23,11 @@ jobs:
       - name: install shellcheck (Linux only — macOS runners pre-install shellcheck)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y shellcheck
-      - name: ensure shellcheck present (brew fallback for macOS image churn)
+      - name: ensure shellcheck present on macOS (brew fallback for image churn)
+        if: runner.os == 'macOS'
         run: command -v shellcheck >/dev/null || { brew install shellcheck && command -v shellcheck; }
+      - name: verify shellcheck present
+        run: command -v shellcheck && shellcheck --version | head -3
       - name: bash -n + shellcheck over shell sources
         run: |
           set -e
