@@ -1,0 +1,86 @@
+# claude-eng-shell
+
+An operating shell for [Claude Code](https://docs.claude.com/claude-code) that runs on top of the standard GitHub workflow. See [SPEC.md](SPEC.md) for the full specification — start from the **Table of contents** at the top of that file and `Read --offset --limit` into the section you care about rather than loading all ~1,300 lines.
+
+## Core ideas
+
+- **GitHub-standard backbone** — every change rides issue → branch → draft PR → checklist commits → ready PR → merge. Default base is `main`; topic-branch / experimental work picks an alternate via `/work-on --base <branch>` (SPEC §10.5).
+- **Doc → Test → Code work order** — strict for `feat`/`docs`/contract changes; relaxed for `fix`/`refactor`/`perf` per SPEC §1.2.
+- **Active SSOT maintenance** — docs change alongside code; merged PR bodies are durable cross-session memory via SessionStart.
+- **Eight subagents** — `explorer`, `planner`, `doc-writer`, `test-writer`, `code-reviewer`, `security-reviewer`, `issue-reviewer`, `plan-reviewer`. The four reviewers (`code-`, `security-`, `issue-`, `plan-`) substitute for human-confirm checkpoints in `unattended` mode.
+- **Hooks enforce discipline** — protected branches, force push, backmerges (`git merge main` on a feature branch), secret exposure, malformed commits, sensitive files, paths outside the registry. Every block is escapable via `SKIP_HOOKS=<category> SKIP_REASON='<why>'` and audit-logged at `.claude/audit/audit.jsonl`.
+
+## Install
+
+```bash
+git clone <this-repo-url> claude-eng-shell
+cd claude-eng-shell
+./scripts/bootstrap.sh
+```
+
+`bootstrap.sh` only checks dependencies — `git`, `gh`, `jq` are required; `python3` is recommended (used by several helpers; missing python falls back to less-precise behavior). It never modifies `~/.zshrc` or any other user-global file. Add the binary to PATH or alias it yourself:
+
+```bash
+export PATH="$PWD/bin:$PATH"
+# or
+alias claude-eng="$PWD/bin/claude-eng"
+```
+
+## Quick start
+
+```bash
+# Clone a target repo into the shell's workspace/.
+./scripts/clone-into.sh https://github.com/<owner>/<repo>.git
+cd workspace/<repo>
+claude-eng
+
+# Inside the session:
+> /onboard
+> /file-issue <description>
+> /work-on <issue#>                          # default: branches from main
+> /work-on <issue#> --base experiment/foo    # topic-branch flow (SPEC §10.5)
+> /ship
+```
+
+External paths register too:
+
+```bash
+./scripts/register.sh ~/code/<repo>
+# or: claude-eng ~/code/<repo>   ← unregistered path prompts to register
+```
+
+## Operating modes
+
+| Mode | `/ship` terminal behavior | Use |
+|---|---|---|
+| `attended` (default) | stops at PR-ready | human reviews + merges |
+| `unattended` | continues to merge (clean) or park (hard blocker) | overnight runs, batched fixes |
+
+Set per-target with `echo unattended > .claude/state/mode`. Override per-invocation with `/ship --mode=unattended`. See SPEC §5.7.1 for the full resolution priority and blocker classification.
+
+## Configuration toggles
+
+All optional. Per-target state files live under `.claude/state/` (gitignored); env vars take priority when set.
+
+| Knob | File | Env | Default | Purpose |
+|---|---|---|---|---|
+| Operating mode | `mode` | `CLAUDE_ENG_SHELL_MODE` | `attended` | `/ship` terminal behavior (§5.7.1) |
+| Co-Authored-By trailer | `coauthor` | `CLAUDE_ENG_COAUTHOR` | `on` | Include the trailer in `/work-on` commits (§10.2) |
+| Status cache TTL | — | `STATUS_CACHE_TTL` | `5` | Seconds before re-querying `gh` from `_status_collect` (§5.5) |
+| Session-start fetch TTL | — | `SESSION_START_FETCH_TTL` | `21600` | Seconds before the shell-behind `git fetch` runs again (§6.5) |
+| Commit-time lint timeout | — | `CLAUDE_ENG_LINT_TIMEOUT` | `30` | Bound on the commit gate's lint (§6.1) |
+
+## Docs
+
+- [SPEC.md](SPEC.md) — the single self-contained specification (SSOT). Start from the TOC at the top.
+- [docs/ENGINEERING_FLOW.md](docs/ENGINEERING_FLOW.md) — step-by-step engineering flow.
+- [docs/SUBAGENTS.md](docs/SUBAGENTS.md) — subagent usage guide.
+- [docs/ESCAPE_HATCH.md](docs/ESCAPE_HATCH.md) — bypassing hooks safely.
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common blocks and fixes.
+
+## Verify
+
+```bash
+./scripts/test/smoke.sh           # ~190 assertions across hooks, helpers, slash commands
+./scripts/build_toc.sh --check    # SPEC.md TOC freshness
+```

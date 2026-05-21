@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export CLAUDE_ENG_SHELL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+
+# If the first arg is a directory, check if it's registered; offer to register if not.
+if [ $# -gt 0 ] && [ -d "$1" ]; then
+  target_path=$(cd "$1" && pwd -P)
+  registry="$CLAUDE_ENG_SHELL_ROOT/.claude/state/registry.txt"
+  registered=0
+  if [ -f "$registry" ]; then
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+      case "$target_path/" in
+        "$entry"/*) registered=1; break ;;
+      esac
+      [ "$target_path" = "$entry" ] && { registered=1; break; }
+    done < "$registry"
+  fi
+  if [ "$registered" = 0 ]; then
+    printf "? '%s' is not registered. Register as workspace/%s and enter? [Y/n] " \
+      "$target_path" "$(basename "$target_path")"
+    read -r resp || resp="Y"
+    case "${resp:-Y}" in
+      [Yy]|"")
+        "$CLAUDE_ENG_SHELL_ROOT/scripts/register.sh" "$target_path"
+        ;;
+      *)
+        echo "Cancelled."
+        exit 0
+        ;;
+    esac
+  fi
+  cd "$target_path"
+  shift
+fi
+
+exec claude "$@"

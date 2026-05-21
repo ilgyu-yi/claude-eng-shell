@@ -1,0 +1,5 @@
+workspace/*
+!workspace/.gitkeep
+!workspace/README.md
+.claude/audit/
+.claude/state/
