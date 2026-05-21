@@ -7,8 +7,12 @@ on:
 
 jobs:
   syntax:
-    name: bash -n
-    runs-on: ubuntu-latest
+    name: bash -n (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - name: bash -n over shell sources
@@ -33,11 +37,18 @@ jobs:
         shell: bash
 
   smoke:
-    name: scripts/test/smoke.sh
-    runs-on: ubuntu-latest
+    name: smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
-      - name: install jq
+      - name: install jq (Linux only — macOS runners pre-install jq)
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y jq
+      - name: verify jq present
+        run: command -v jq && jq --version
       - name: run smoke
         run: ./scripts/test/smoke.sh
