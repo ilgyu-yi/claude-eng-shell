@@ -2001,6 +2001,10 @@ run_37_session_start() {
     export TMPDIR="$SESS_37_TMP"
     export CLAUDE_SESSION_ID="$SESS_37_SID"
     cd "$cwd" || exit 1
+    # Same intentional swap as post_run at smoke.sh:1023 — caller captures
+    # stdout via $(...); the hook writes to stderr; this order routes
+    # stderr into the captured pipe while discarding hook stdout.
+    # shellcheck disable=SC2069
     bash "$SHELL_ROOT/.claude/hooks/session_start.sh" 2>&1 >/dev/null
   )
 }
