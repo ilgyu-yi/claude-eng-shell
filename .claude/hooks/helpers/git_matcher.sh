@@ -16,10 +16,15 @@
 # subset is enumerated by `branch_guard.sh::_protected_static_refs` for
 # the detached-HEAD tip-equality check.
 #
-# Behavior preserved byte-exact against the prior open-coded literals:
-# `release/\S+` (ERE) matches `release/foo` but not `release/foo bar`
-# (whitespace), and the case-glob `release/*` matches the same set.
-# Tightening (e.g. `release/[^[:space:]/]+`) is a separate concern.
+# Behavior preserved byte-exact against the prior `release/\S+` ERE
+# matchers in pre_tool_use.sh: `release/foo` matches, `release/foo bar`
+# (whitespace) does not. The legacy `case "$b" in main|master|release/*)`
+# in branch_guard.sh was looser — its `*` glob would have matched
+# `release/foo bar` too — but git's own check-ref-format rejects branch
+# names with whitespace, so that codepath was unreachable in practice
+# and the refactor tightens an already-dead case rather than weakening
+# enforcement.
+# Tightening further (e.g. `release/[^[:space:]/]+`) is a separate concern.
 #
 # Consumers: pre_tool_use.sh matchers use the ERE form via grep -qE
 # interpolation. branch_guard.sh::is_protected_branch uses the ERE

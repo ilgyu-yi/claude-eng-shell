@@ -1894,16 +1894,16 @@ fi
 #       expected set (main / master / release/foo) while rejecting near-
 #       misses (mainframe, feature/main).
 #   36b (drift-lock): the literal three-token alternation `main|master|release`
-#       must not appear in any enforcement file outside git_matcher.sh.
+#       must not appear in any *.sh file under .claude/hooks/ except for
+#       git_matcher.sh itself. Deny-list scan — any new enforcement file
+#       under hooks/ that copy-pastes the literal is caught automatically,
+#       no allow-list update required.
 #       Implementation note: the grep pattern uses BRE-escaped pipes
 #       (`main\|master\|release`) so smoke.sh's own source — which contains
 #       these literal grep strings — does NOT self-match the unescaped
 #       `main|master|release` form that lives only in git_matcher.sh.
 #       DO NOT change `\|` to `|` here or the test will self-match and
 #       silently always pass.
-#
-# Allow-list of enforcement files is explicit. Any new file under
-# .claude/hooks/ that gates on protected branches must be added below.
 ( . "$SHELL_ROOT/.claude/hooks/helpers/git_matcher.sh"
   fail36a=0
   [ -n "${PROTECTED_BRANCH_PATTERN:-}" ] || fail36a=1
@@ -1923,20 +1923,21 @@ fi
   fi
 )
 
-# 36b: literal `main|master|release` outside git_matcher.sh is drift.
-drift=""
-for f in \
-  .claude/hooks/pre_tool_use.sh \
-  .claude/hooks/helpers/branch_guard.sh; do
-  if grep -qE 'main\|master\|release' "$SHELL_ROOT/$f"; then
-    drift="$drift $f"
-  fi
-done
+# 36b: deny-list scan. Any *.sh file under .claude/hooks/ (recursive) that
+# is not git_matcher.sh itself and still carries the literal three-token
+# alternation `main|master|release` is drift. Switching from an explicit
+# allow-list to a deny-list closes the false-negative gap where a new
+# enforcement gate added to e.g. post_tool_use.sh could silently copy-paste
+# the literal and escape detection.
+drift=$(find "$SHELL_ROOT/.claude/hooks" -type f -name '*.sh' \
+        ! -path '*/git_matcher.sh' \
+        -exec grep -lE 'main\|master\|release' {} + 2>/dev/null \
+       | sed "s|^$SHELL_ROOT/||" | tr '\n' ' ')
 if ! grep -qE 'main\|master\|release' \
      "$SHELL_ROOT/.claude/hooks/helpers/git_matcher.sh"; then
   ng "protected-ssot: pattern absent from git_matcher.sh (constant gone?) (#16)"
-elif [ -n "$drift" ]; then
-  ng "protected-ssot: literal pattern found outside git_matcher.sh:$drift (#16)"
+elif [ -n "${drift% }" ]; then
+  ng "protected-ssot: literal pattern found outside git_matcher.sh: ${drift% } (#16)"
 else
   ok "protected-ssot: literal pattern centralized in git_matcher.sh (#16)"
 fi
