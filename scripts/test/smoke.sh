@@ -1971,6 +1971,89 @@ else
   ng "readme-toggles: README.md not found at $README_MD (#15)"
 fi
 
+# ---------- 37. SessionStart inject-consistency banner (#23) ----------
+# When the shell was injected into a target (settings.local.json is a
+# symlink) but CLAUDE_ENG_SHELL_ROOT is unset (user ran `claude`, not
+# `claude-eng`), SessionStart must emit one stderr warning so the silent
+# no-op state is visible. The check runs *before* session_start.sh's
+# env-guard at lines 4-5; without it every hook silently exits 0.
+# Marker substring locked here: `inject-consistency`. Banner text may
+# evolve so long as that token remains.
+SESS_37_DIR=$(mktemp -d)
+SESS_37_SHELL="$SESS_37_DIR/shell"
+SESS_37_TARGET="$SESS_37_DIR/target"
+mkdir -p "$SESS_37_SHELL/.claude" "$SESS_37_TARGET/.claude"
+touch "$SESS_37_SHELL/.claude/settings.json"
+# Mirror inject_into's symlink: target/.claude/settings.local.json → shell/.claude/settings.json
+ln -sfn "$SESS_37_SHELL/.claude/settings.json" "$SESS_37_TARGET/.claude/settings.local.json"
+
+# Stable TMPDIR + session id so the stamp file is deterministic across
+# 37a / 37d.
+SESS_37_TMP="$SESS_37_DIR/tmp"; mkdir -p "$SESS_37_TMP"
+SESS_37_SID="smoke37"
+
+run_37_session_start() {
+  local env_set="$1"   # 'set' | 'unset'
+  local cwd="$2"
+  (
+    unset CLAUDE_ENG_SHELL_ROOT
+    [ "$env_set" = set ] && export CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT"
+    export TMPDIR="$SESS_37_TMP"
+    export CLAUDE_SESSION_ID="$SESS_37_SID"
+    cd "$cwd" || exit 1
+    # Same intentional swap as post_run at smoke.sh:1023 — caller captures
+    # stdout via $(...); the hook writes to stderr; this order routes
+    # stderr into the captured pipe while discarding hook stdout.
+    # shellcheck disable=SC2069
+    bash "$SHELL_ROOT/.claude/hooks/session_start.sh" 2>&1 >/dev/null
+  )
+}
+
+# 37a (positive): symlink + env unset → banner.
+rm -rf "$SESS_37_TMP/claude-eng-banner."*
+out37a=$(run_37_session_start unset "$SESS_37_TARGET")
+if printf '%s' "$out37a" | grep -q 'inject-consistency'; then
+  ok "session-banner: symlink + env unset emits banner (#23)"
+else
+  ng "session-banner: symlink + env unset should emit banner (#23)"
+fi
+
+# 37b (env-set negative): symlink + env set → no banner (env tells the
+# shell it knows where it is).
+rm -rf "$SESS_37_TMP/claude-eng-banner."*
+out37b=$(run_37_session_start set "$SESS_37_TARGET")
+if printf '%s' "$out37b" | grep -q 'inject-consistency'; then
+  ng "session-banner: env-set should suppress banner (#23)"
+else
+  ok "session-banner: env-set + symlink → no banner (#23)"
+fi
+
+# 37c (no-symlink negative): no symlink + env unset → no banner. A
+# workspace that was never injected must stay quiet (no false positives).
+SESS_37_CLEAN="$SESS_37_DIR/clean"; mkdir -p "$SESS_37_CLEAN/.claude"
+rm -rf "$SESS_37_TMP/claude-eng-banner."*
+out37c=$(run_37_session_start unset "$SESS_37_CLEAN")
+if printf '%s' "$out37c" | grep -q 'inject-consistency'; then
+  ng "session-banner: non-injected dir should not emit banner (#23)"
+else
+  ok "session-banner: no symlink → no banner (#23)"
+fi
+
+# 37d (idempotency): same SID/TMPDIR — second run within the session
+# must suppress the banner (one-per-session debounce).
+rm -rf "$SESS_37_TMP/claude-eng-banner."*
+out37d_first=$(run_37_session_start unset "$SESS_37_TARGET")
+out37d_second=$(run_37_session_start unset "$SESS_37_TARGET")
+first_hit=$(printf '%s' "$out37d_first" | grep -c 'inject-consistency')
+second_hit=$(printf '%s' "$out37d_second" | grep -c 'inject-consistency')
+if [ "$first_hit" = "1" ] && [ "$second_hit" = "0" ]; then
+  ok "session-banner: debounced to once per session (#23)"
+else
+  ng "session-banner: idempotency broken (first=$first_hit second=$second_hit) (#23)"
+fi
+
+rm -rf "$SESS_37_DIR"
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"
