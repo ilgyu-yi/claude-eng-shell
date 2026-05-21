@@ -117,18 +117,25 @@ SCAN_DIR=$(mktemp -d)
 rm -rf "$SCAN_DIR"
 
 # 6b: positive — leak on a non-ignored file emits `file:line: <id>` marker (#25).
+# Capture-then-grep instead of `subshell | grep -q`: `grep -q` exits on first
+# match, sends SIGPIPE upstream, and the subshell exits 141. Under the
+# smoke's `set -uo pipefail` the SIGPIPE propagates as the pipeline status
+# and falsely fires the failure branch. Capture closes the pipe cleanly.
 SCAN_6B=$(mktemp -d)
-(
+scan_6b_out=$(
   cd "$SCAN_6B" || exit 1
   git init -q
   mkdir -p src
   printf 'aws_key = "AKIAIOSFODNN7EXAMPLE"\n' > src/foo.py
   git add src/foo.py
-  # shellcheck disable=SC2069  # intentional: stderr → captured pipe, stdout discarded
+  # shellcheck disable=SC2069  # intentional: stderr → captured stdout, stdout discarded
   scan_staged_secrets 2>&1 >/dev/null
-) | grep -qE 'src/foo\.py:[0-9]+:.*(aws|AKIA)' \
-  && ok "secret_scan: emits file:line:<id> on non-ignored hit (#25)" \
-  || ng "secret_scan: should emit file:line:<id> marker (#25)"
+)
+if printf '%s\n' "$scan_6b_out" | grep -qE 'src/foo\.py:[0-9]+:.*(aws|AKIA)'; then
+  ok "secret_scan: emits file:line:<id> on non-ignored hit (#25)"
+else
+  ng "secret_scan: should emit file:line:<id> marker (#25)"
+fi
 rm -rf "$SCAN_6B"
 
 # 6c: allow-list — leak on a path matched by .shellsecretignore is skipped (#25).
