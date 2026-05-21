@@ -695,7 +695,7 @@ Explicit entry point for updating the PR body. The main assistant does this auto
 
 Refetch the remote body once before updating. The shell stores the SHA-256 of the last body it saw at `.claude/state/pr-cache/<owner>%2F<repo>__pr-<n>.json` (the `/` between owner and repo is URL-encoded as `%2F` so `<owner>/<repo>` slug boundaries survive the filename); the file holds at least `last_seen_body_sha256`, `last_synced_head`, and `last_synced_at`. If the remote body's SHA differs from `last_seen_body_sha256`, an external edit happened (reviewer, parallel session, GitHub UI) — the automatic update aborts with a stderr message naming the conflict, and merging is the human's call. After a successful sync the cache is rewritten. A corrupt cache file (unparseable / missing key) also aborts the sync rather than silently treating as "first sync."
 
-The cache lives under `.claude/state/`, which is gitignored — it's per-clone state, not part of the repo's history. The helper `.claude/hooks/helpers/pr_cache.sh` exports `pr_cache_read`, `pr_cache_write`, and `pr_cache_check`. `/ship` reuses the cache transitively by routing its body curation through `/sync-pr` (§5.7 step 5). `/work-on` doesn't update the body after PR creation, so it doesn't touch the cache directly; later edits go through `/sync-pr`.
+The cache lives under `.claude/state/`, which is gitignored — it's per-clone state, not part of the repo's history. The helper `.claude/hooks/helpers/pr_cache.sh` exports `pr_cache_read`, `pr_cache_write`, and `pr_cache_check`. The repo slug is derived from `gh repo view` of the cwd, overridable via `$PR_CACHE_REPO` (used by the smoke test suite). `/ship` reuses the cache transitively by routing its body curation through `/sync-pr` (§5.7 step 5). `/work-on` doesn't update the body after PR creation, so it doesn't touch the cache directly; later edits go through `/sync-pr`.
 
 ### 5.5 `/status`
 
@@ -762,7 +762,7 @@ Unknown values fail closed to `attended` and emit a stderr warning naming the of
 
 1. Post a `gh pr comment` with a deterministic state summary (blocker reason + current SHA + CI snapshot).
 2. Apply label `unattended-parked` (create the label on demand if missing). If the label is already present from a previous park on the same PR, `ship_park_pr` writes a single `park-suppressed: <reason>` line to the log instead of reposting the comment, and emits no comment to stdout. The original park comment remains canonical; the label remains applied.
-3. Append one line to `$CLAUDE_ENG_SHELL_ROOT/.claude/state/unattended-park.log` (shell-side, gitignored — not the target's MEMORY.md, not `audit.jsonl`). On suppressed repeat, only the `park-suppressed: <reason>` line is appended.
+3. Append one line to `${SHIP_PARK_LOG_PATH:-$CLAUDE_ENG_SHELL_ROOT/.claude/state/unattended-park.log}` (shell-side, gitignored — not the target's MEMORY.md, not `audit.jsonl`). The override exists for smoke-test isolation. On suppressed repeat, only the `park-suppressed: <reason>` line is appended.
 4. Stop. Do not toggle draft or self-assign.
 
 **Classifier robustness**: `ship_classify_blocker` fails closed to `hard` in two failure modes and emits a one-line stderr warning naming the cause:
@@ -872,7 +872,7 @@ Claude Code's `Stop` hook fires **after every model response**, not at session e
 - uncommitted changes + no recent review → suggest `/review`
 - recent commit + PR body checklist out of sync → suggest `/sync-pr`
 
-Suggestions print one line to stderr (no blocking). Throttling is a simple modulo — no per-category state file.
+Suggestions print one line to stderr (no blocking). Throttling is a simple modulo of N (default 5, overridable via `$CLAUDE_ENG_STOP_THROTTLE`) — no per-category state file.
 
 Session-level cleanup (branch tidy, temp files) belongs to a separate `SessionEnd` hook (where supported) or a user-invoked `/wrap`.
 
