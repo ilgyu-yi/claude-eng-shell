@@ -55,6 +55,7 @@ Don't re-run an exploration in `explorer` that the main assistant already did.
 - Secret patterns in staged diff blocked
 - Edits to `.env`, `*.pem`, `credentials*` blocked
 - Edit/Write outside registry, and `rm -rf`/`mv -f`/`cp -f` with out-of-registry args, blocked
+- SessionStart warns if shell was injected but launched via plain `claude` (not `claude-eng`) — `CLAUDE_ENG_SHELL_ROOT` unset means every hook silently no-ops
 
 Escape: `SKIP_HOOKS=<category> SKIP_REASON='<reason>' <command>`. All escapes are audit-logged.
 
