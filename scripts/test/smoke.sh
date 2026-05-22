@@ -1362,6 +1362,10 @@ mkdir -p "$SESS_FAKE_ROOT/.claude/hooks/helpers" \
          "$SESS_FAKE_ROOT/.claude/audit"
 
 cp "$SHELL_ROOT/.claude/hooks/session_start.sh" "$SESS_FAKE_ROOT/.claude/hooks/"
+# hookrt.sh hosts audit_log + safe_source after #34; session_start.sh
+# primitively bootstraps it before sourcing any helper. Copy it too or
+# the bootstrap fails and session_start exits before the git-fetch logic.
+cp "$SHELL_ROOT/.claude/hooks/hookrt.sh" "$SESS_FAKE_ROOT/.claude/hooks/" 2>/dev/null
 for h in log escape cwd_guard branch_guard; do
   cp "$SHELL_ROOT/.claude/hooks/helpers/$h.sh" "$SESS_FAKE_ROOT/.claude/hooks/helpers/" 2>/dev/null
 done
