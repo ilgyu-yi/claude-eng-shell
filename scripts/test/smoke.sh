@@ -2480,13 +2480,33 @@ for entry in "${SS_TABLE[@]}"; do
   SS_CUR_PATH=""
   SS_CUR_BAK=""
 
+  # Core contract: rc=0 (fail-open) + audit grew + category + decision tokens.
+  ss_ok=0
   if [ "$ss_rc" = 0 ] \
      && [ "$ss_new" -ge 1 ] \
      && printf '%s' "$ss_tail" | grep -q "\"category\":\"$ss_cat\"" \
      && printf '%s' "$ss_tail" | grep -q '"decision":"helper-missing"'; then
+    ss_ok=1
+  fi
+
+  # Security-relevant suffix contract (SPEC §6.1): the warn carries
+  # "NOT ENFORCED (security-relevant)" for secret + branch categories,
+  # and MUST NOT carry it for any other category. Mismatch is treated as
+  # a hard fail of this iteration — the SPEC affordance exists specifically
+  # to draw operator attention.
+  case "$ss_cat" in
+    secret|branch)
+      printf '%s' "$ss_tail" | grep -q 'NOT ENFORCED' || ss_ok=0
+      ;;
+    *)
+      printf '%s' "$ss_tail" | grep -q 'NOT ENFORCED' && ss_ok=0
+      ;;
+  esac
+
+  if [ "$ss_ok" = 1 ]; then
     ok "safe_source: $ss_helper missing → warn ($ss_cat) emitted (#34)"
   else
-    ng "safe_source: $ss_helper missing — expected category=$ss_cat decision=helper-missing; got rc=$ss_rc new=$ss_new tail=$ss_tail (#34)"
+    ng "safe_source: $ss_helper missing — expected category=$ss_cat decision=helper-missing (security-suffix per §6.1); got rc=$ss_rc new=$ss_new tail=$ss_tail (#34)"
   fi
 done
 

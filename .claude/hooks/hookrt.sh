@@ -82,6 +82,13 @@ safe_source() {
     . "$helper_path" && return 0
   fi
   # Missing OR sourcing errored — warn and tell the caller to short-circuit.
-  audit_log warn "$category" helper-missing "$helper_path not loaded; hook fail-open per SPEC §6.1. Restart claude-eng if a hook-spec change recently introduced this helper."
+  # Security-relevant categories carry a NOT ENFORCED suffix so an operator
+  # scanning audit.jsonl can distinguish "informational helper unavailable"
+  # from "security gate is OFF" at a glance. SPEC §6.1 fail-policy table.
+  local sev_suffix=""
+  case "$category" in
+    secret|branch) sev_suffix=" — NOT ENFORCED (security-relevant)" ;;
+  esac
+  audit_log warn "$category" helper-missing "$helper_path not loaded; hook fail-open per SPEC §6.1. Restart claude-eng if a hook-spec change recently introduced this helper.${sev_suffix}"
   return 1
 }
