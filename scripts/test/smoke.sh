@@ -2171,6 +2171,157 @@ fi
 
 rm -rf "$SESS_37_DIR"
 
+# ---------- 38. gh pr merge AC closeout gate (#29) ----------
+# PreToolUse blocks `gh pr merge` when any issue in the PR's
+# closingIssuesReferences has unchecked AC items AND no comment with a
+# `^## AC closeout` header is present. Tests use a gh shim on PATH so
+# the matcher's gh queries return canned JSON without network. Mirrors
+# the §11h shim pattern.
+GH38_DIR=$(mktemp -d)
+GH38_SHIM="$GH38_DIR/bin"
+GH38_STATE="$GH38_DIR/state"
+mkdir -p "$GH38_SHIM" "$GH38_STATE"
+
+cat > "$GH38_SHIM/gh" <<'SHIM'
+#!/bin/sh
+case "$*" in
+  *"pr view"*"closingIssuesReferences"*)
+    cat "$GH_SHIM_STATE/pr_issues" 2>/dev/null
+    ;;
+  *"pr view"*"--json number"*)
+    cat "$GH_SHIM_STATE/pr_number" 2>/dev/null
+    ;;
+  *"issue view"*"--json body"*)
+    cat "$GH_SHIM_STATE/issue_body" 2>/dev/null
+    ;;
+  *"issue view"*"--json comments"*)
+    cat "$GH_SHIM_STATE/issue_comments" 2>/dev/null
+    ;;
+  *"issue comment"*)
+    : "${GH_SHIM_STATE:?}"
+    echo "post" >> "$GH_SHIM_STATE/post_log"
+    cat >> "$GH_SHIM_STATE/posted_body" 2>/dev/null
+    ;;
+esac
+exit 0
+SHIM
+chmod +x "$GH38_SHIM/gh"
+
+# Run the PreToolUse hook with $cmd as the Bash tool_input.command.
+# Captures hook stderr via the 2>&1 >/dev/null swap; returns the hook's
+# exit code as the function's exit code (pipefail propagates).
+gh38_run() {
+  local cmd="$1"
+  # shellcheck disable=SC2069  # intentional: swap stderr → captured pipe, discard stdout
+  printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
+    "$(printf '%s' "$cmd" | jq -Rs .)" \
+    | PATH="$GH38_SHIM:$PATH" \
+      GH_SHIM_STATE="$GH38_STATE" \
+      CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT" \
+      bash "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" 2>&1 >/dev/null
+}
+
+# Helper to reset the shim state between sub-cases.
+gh38_reset() {
+  rm -f "$GH38_STATE"/pr_issues "$GH38_STATE"/pr_number \
+        "$GH38_STATE"/issue_body "$GH38_STATE"/issue_comments \
+        "$GH38_STATE"/post_log "$GH38_STATE"/posted_body
+}
+
+# 38a: positive block — linked issue with unchecked AC, no closeout marker.
+gh38_reset
+printf '100\n' > "$GH38_STATE/pr_issues"
+printf -- '- [ ] do the thing\n- [x] already done\n' > "$GH38_STATE/issue_body"
+: > "$GH38_STATE/issue_comments"
+out38a=$(gh38_run "gh pr merge 200 --merge")
+rc38a=$?
+if [ "$rc38a" = 2 ] && printf '%s' "$out38a" | grep -q 'ac-closeout'; then
+  ok "ac-closeout: blocks gh pr merge when AC unchecked + no marker (#29)"
+else
+  ng "ac-closeout: should have blocked (rc=$rc38a) (#29)"
+fi
+
+# 38b: allow when `^## AC closeout` marker comment already exists.
+gh38_reset
+printf '100\n' > "$GH38_STATE/pr_issues"
+printf -- '- [ ] do the thing\n' > "$GH38_STATE/issue_body"
+printf '## AC closeout (resolved by PR #200)\nbody...\n' > "$GH38_STATE/issue_comments"
+out38b=$(gh38_run "gh pr merge 200 --merge")
+rc38b=$?
+if [ "$rc38b" = 0 ]; then
+  ok "ac-closeout: allows merge when closeout marker present (#29)"
+else
+  ng "ac-closeout: should have allowed when marker present (rc=$rc38b: $out38b) (#29)"
+fi
+
+# 38c: allow when linked issue has no `- [ ]` AC items (all ticked / N/A).
+gh38_reset
+printf '100\n' > "$GH38_STATE/pr_issues"
+printf -- '- [x] done\n- [~] N/A — reason\n' > "$GH38_STATE/issue_body"
+: > "$GH38_STATE/issue_comments"
+out38c=$(gh38_run "gh pr merge 200 --merge")
+rc38c=$?
+if [ "$rc38c" = 0 ]; then
+  ok "ac-closeout: allows merge when issue has no unchecked AC (#29)"
+else
+  ng "ac-closeout: should have allowed on no-AC (rc=$rc38c: $out38c) (#29)"
+fi
+
+# 38d: SKIP_HOOKS=ac-closeout escape — must allow and audit-log.
+gh38_reset
+printf '100\n' > "$GH38_STATE/pr_issues"
+printf -- '- [ ] do the thing\n' > "$GH38_STATE/issue_body"
+: > "$GH38_STATE/issue_comments"
+REAL_AUDIT="$SHELL_ROOT/.claude/audit/audit.jsonl"
+audit_before=$(wc -l < "$REAL_AUDIT" 2>/dev/null | tr -d ' ' || echo 0)
+out38d=$(gh38_run "SKIP_HOOKS=ac-closeout SKIP_REASON='emergency' gh pr merge 200 --merge")
+rc38d=$?
+audit_after=$(wc -l < "$REAL_AUDIT" 2>/dev/null | tr -d ' ' || echo 0)
+if [ "$rc38d" = 0 ] && [ "$audit_after" -gt "$audit_before" ] \
+   && tail -1 "$REAL_AUDIT" 2>/dev/null | grep -q 'ac-closeout'; then
+  ok "ac-closeout: SKIP_HOOKS=ac-closeout allows merge + audit-logged (#29)"
+else
+  ng "ac-closeout: SKIP_HOOKS=ac-closeout failed (rc=$rc38d, audit_before=$audit_before, audit_after=$audit_after) (#29)"
+fi
+
+# 38e: PR with no closingIssuesReferences (no linked issue) → allow.
+gh38_reset
+: > "$GH38_STATE/pr_issues"  # empty list
+out38e=$(gh38_run "gh pr merge 200 --merge")
+rc38e=$?
+if [ "$rc38e" = 0 ]; then
+  ok "ac-closeout: allows merge when PR has no linked issues (#29)"
+else
+  ng "ac-closeout: should have allowed when no closingIssuesReferences (rc=$rc38e: $out38e) (#29)"
+fi
+
+# 38f: helper idempotency — scripts/ac_closeout.sh posts once, then skips.
+gh38_reset
+printf '100\n' > "$GH38_STATE/pr_issues"
+printf -- '- [ ] do the thing\n- [ ] another\n' > "$GH38_STATE/issue_body"
+: > "$GH38_STATE/issue_comments"
+(
+  export GH_SHIM_STATE="$GH38_STATE"
+  export PATH="$GH38_SHIM:$PATH"
+  "$SHELL_ROOT/scripts/ac_closeout.sh" 200 >/dev/null 2>&1
+)
+posts1=$(wc -l < "$GH38_STATE/post_log" 2>/dev/null | tr -d ' ' || echo 0)
+# Now simulate the marker being present (helper would have posted it).
+printf '## AC closeout (resolved by PR #200)\nbody...\n' > "$GH38_STATE/issue_comments"
+(
+  export GH_SHIM_STATE="$GH38_STATE"
+  export PATH="$GH38_SHIM:$PATH"
+  "$SHELL_ROOT/scripts/ac_closeout.sh" 200 >/dev/null 2>&1
+)
+posts2=$(wc -l < "$GH38_STATE/post_log" 2>/dev/null | tr -d ' ' || echo 0)
+if [ "$posts1" -ge 1 ] && [ "$posts2" = "$posts1" ]; then
+  ok "ac-closeout: helper idempotent (first run posts, second skips) (#29)"
+else
+  ng "ac-closeout: helper not idempotent (posts1=$posts1, posts2=$posts2) (#29)"
+fi
+
+rm -rf "$GH38_DIR"
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"
