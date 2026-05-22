@@ -28,7 +28,7 @@ Full details in [SPEC.md §2](../SPEC.md).
        ▼
 [Mid-checkpoint] /status, /review as needed
        ▼
-[/ship]   resolve mode → review → security (conditional) → doc sync → tests → curate PR body → verify Closes → CI → gh pr ready
+[/ship]   resolve mode → review → security (conditional) → doc sync → tests → curate PR body → verify Closes → issue AC closeout → CI → gh pr ready
        │
        ├── mode = attended (default) → stop at "ready"
        │       ▼
