@@ -13,7 +13,7 @@ SKIP_HOOKS=<category>[,<category>...] SKIP_REASON='<reason>' <command>
 ## Categories
 
 - `all` — emergencies only.
-- `secret` — secret pattern detected in staged diff.
+- `secret` — secret pattern detected in staged diff. Persistent false positives (doc/test fixtures, ADR examples) should be added to `.shellsecretignore` at the target-repo root (gitignore-narrow globs) instead of repeated `SKIP_HOOKS=secret`. Allow-list is read from `HEAD`, so introducing a new entry requires its own commit before it takes effect — preventing same-commit self-bypass.
 - `branch` — commit/push/edit on a protected branch.
 - `commit-format` — Conventional Commit format violation.
 - `format` — lint failure at commit time.
@@ -39,6 +39,6 @@ SKIP_HOOKS=out-of-scope SKIP_REASON='ad-hoc cache cleanup' rm -rf /tmp/some-cach
 - Skips should be temporary.
 - A skip with no `SKIP_REASON` is logged as `unspecified` — easy review target.
 - Use `all` only in emergencies.
-- A category that gets skipped repeatedly is a sign the hook is misconfigured — open a PR to fix it.
+- A category that gets skipped repeatedly is a sign the hook is misconfigured — open a PR to fix it (for `secret`, that means adding the path to `.shellsecretignore`, not normalizing the bypass).
 
 Every skip is recorded as one line of JSON in `.claude/audit/audit.jsonl`.

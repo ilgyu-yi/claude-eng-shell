@@ -50,20 +50,27 @@ SECRET_PATTERNS=(
 )
 
 # _secret_load_allow_list
-#   Populates SECRET_ALLOW_ENTRIES (global) from $toplevel/.shellsecretignore.
+#   Populates SECRET_ALLOW_ENTRIES (global) from `.shellsecretignore`
+#   **at HEAD**, not the working tree. Same-commit additions to the
+#   allow-list cannot self-bypass: the entry must be on a prior commit
+#   to take effect for this commit. (Security review of #25 flagged the
+#   working-tree read as a MEDIUM self-bypass vector.) Initial introduction
+#   of `.shellsecretignore` therefore requires two commits — the file
+#   first, then the work it covers. Pre-HEAD setup (no `.shellsecretignore`
+#   at HEAD yet) = no allow-list = today's strict behavior.
 #   Trims trailing whitespace via sed; drops blanks and `#` comments.
-#   Called once per scan_staged_secrets invocation; idempotent within that
-#   scope. Out-of-band caller can pre-call to inspect/test.
 _secret_load_allow_list() {
   SECRET_ALLOW_ENTRIES=()
-  local toplevel ignorefile entry
-  toplevel=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
-  ignorefile="$toplevel/.shellsecretignore"
-  [ -f "$ignorefile" ] || return 0
-  # sed strips trailing whitespace; grep drops blanks and `#` comments.
+  local raw
+  # `git show HEAD:.shellsecretignore` exits non-zero if file is absent at
+  # HEAD; either case yields an empty allow-list (silent — no error to
+  # avoid false alarms on fresh repos with no commits yet).
+  raw=$(git show HEAD:.shellsecretignore 2>/dev/null) || return 0
+  [ -z "$raw" ] && return 0
+  local entry
   while IFS= read -r entry || [ -n "$entry" ]; do
     SECRET_ALLOW_ENTRIES+=("$entry")
-  done < <(sed -E 's/[[:space:]]+$//' "$ignorefile" | grep -Ev '^[[:space:]]*(#|$)')
+  done < <(printf '%s\n' "$raw" | sed -E 's/[[:space:]]+$//' | grep -Ev '^[[:space:]]*(#|$)')
 }
 
 # secret_scan_path_allowed <path>
@@ -108,19 +115,52 @@ scan_staged_secrets() {
 
   local file="" lineno=0 line content i hit=0 first_pat=""
   local stderr_buf=""
-  local hunk plus
+  local hunk plus expect_plusplusplus=0
+  # State machine: `+++ ` is only a real diff header when the immediately
+  # preceding line was `--- ` (the `a/` side). Otherwise `+++ <text>` is an
+  # added content line whose body starts with `++ ` (two pluses + space) —
+  # security review of #25 demonstrated that the naive case-glob misparsed
+  # such a content line, reassigning `file` to attacker-supplied text and
+  # bypassing the scan via the allow-list.
   while IFS= read -r line; do
     case "$line" in
+      '--- '*)
+        expect_plusplusplus=1
+        ;;
       '+++ '*)
-        if [ "$line" = '+++ /dev/null' ]; then
-          file=""
+        if [ "$expect_plusplusplus" = 1 ]; then
+          # Real diff header (preceded by `--- `).
+          expect_plusplusplus=0
+          if [ "$line" = '+++ /dev/null' ]; then
+            file=""
+          else
+            file="${line#+++ }"
+            file="${file#b/}"
+          fi
+          lineno=0
         else
-          file="${line#+++ }"
-          file="${file#b/}"
+          # Content line whose body starts with `++ ` — treat as added content.
+          lineno=$((lineno + 1))
+          [ -z "$file" ] && continue
+          if secret_scan_path_allowed "$file"; then
+            continue
+          fi
+          content="${line#+}"
+          for i in "${!SECRET_PATTERNS[@]}"; do
+            # `--` separates options from pattern so leading-`-` patterns
+            # (e.g. `-----BEGIN ... PRIVATE KEY-----`) are not consumed as
+            # grep options on BSD grep (macOS). Security review HIGH-2.
+            if printf '%s' "$content" | grep -qE -- "${SECRET_PATTERNS[$i]}"; then
+              hit=1
+              stderr_buf="${stderr_buf}${file}:${lineno}: ${SECRET_IDS[$i]}"$'\n'
+              [ -z "$first_pat" ] && first_pat="${SECRET_PATTERNS[$i]}"
+              break
+            fi
+          done
         fi
-        lineno=0
         ;;
       '@@'*)
+        expect_plusplusplus=0
         hunk="${line#@@ }"
         hunk="${hunk%% @@*}"
         # Extract the +C portion (after the space-+ separator, drop optional `,D`).
@@ -131,7 +171,7 @@ scan_staged_secrets() {
         lineno=$((lineno - 1))
         ;;
       '+'*)
-        # `+++` matched above; this is a content add line.
+        expect_plusplusplus=0
         lineno=$((lineno + 1))
         [ -z "$file" ] && continue
         if secret_scan_path_allowed "$file"; then
@@ -139,7 +179,8 @@ scan_staged_secrets() {
         fi
         content="${line#+}"
         for i in "${!SECRET_PATTERNS[@]}"; do
-          if printf '%s' "$content" | grep -qE "${SECRET_PATTERNS[$i]}"; then
+          # See note above re: leading-`--` for BSD-grep option-parsing.
+          if printf '%s' "$content" | grep -qE -- "${SECRET_PATTERNS[$i]}"; then
             hit=1
             stderr_buf="${stderr_buf}${file}:${lineno}: ${SECRET_IDS[$i]}"$'\n'
             [ -z "$first_pat" ] && first_pat="${SECRET_PATTERNS[$i]}"
@@ -148,7 +189,8 @@ scan_staged_secrets() {
         done
         ;;
       *)
-        # Other diff metadata (---, diff --git, index, Binary, rename,
+        expect_plusplusplus=0
+        # Other diff metadata (diff --git, index, Binary, rename,
         # \ No newline) — ignore. Parser is intentionally narrow.
         ;;
     esac
