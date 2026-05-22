@@ -2324,6 +2324,84 @@ else
   ng "ac-closeout: helper not idempotent (posts1=$posts1, posts2=$posts2) (#29)"
 fi
 
+# 38g: command-shape regression (#31) — matcher + extractor / fallback
+# must handle the live dogfood-failing form and four common variants.
+# The failure on PR #30 used the piped form; lock all five against
+# future matcher drift.
+gh38_g_shapes=(
+  "gh pr merge 200 --merge --delete-branch 2>&1 | tail -3"
+  "gh pr merge 200 --merge | tail -1"
+  "gh pr merge 200 --merge > /tmp/out"
+  "cd /tmp && gh pr merge 200 --merge"
+  "gh pr merge 200 --merge; echo done"
+)
+shape_fails=0
+shape_miss_log=""
+for shape in "${gh38_g_shapes[@]}"; do
+  gh38_reset
+  printf '100\n' > "$GH38_STATE/pr_issues"
+  printf '200\n' > "$GH38_STATE/pr_number"
+  printf -- '- [ ] do the thing\n' > "$GH38_STATE/issue_body"
+  : > "$GH38_STATE/issue_comments"
+  shape_out=$(gh38_run "$shape")
+  shape_rc=$?
+  if [ "$shape_rc" != 2 ] || ! printf '%s' "$shape_out" | grep -q 'ac-closeout'; then
+    shape_fails=$((shape_fails + 1))
+    shape_miss_log="$shape_miss_log
+  miss: rc=$shape_rc cmd='$shape' out=$shape_out"
+  fi
+done
+if [ "$shape_fails" = 0 ]; then
+  ok "ac-closeout: blocks all 5 command-shape variants (piped/redirect/prepend/sep) (#31)"
+else
+  ng "ac-closeout: $shape_fails/5 command shapes failed to block (#31)$shape_miss_log"
+fi
+
+# 38h: helper-missing fail-open audit-warn (#31) — reproduces the PR
+# #30 dogfood silence. With the helper file removed (simulating a
+# session whose hook routing predates the helper's introduction), the
+# matcher must still emit `audit_log warn ac-closeout helper-missing`
+# instead of silently falling through. Failure of this test on the
+# unfixed code is the bug; passing it locks the guarded-source contract.
+HELPER_PATH="$SHELL_ROOT/.claude/hooks/helpers/ac_closeout_gate.sh"
+HELPER_BAK="$GH38_DIR/ac_closeout_gate.sh.bak"
+gh38_h_restore() {
+  if [ ! -f "$HELPER_PATH" ] && [ -f "$HELPER_BAK" ]; then
+    mv "$HELPER_BAK" "$HELPER_PATH"
+  fi
+}
+# Stack trap so a crash mid-test restores the helper; clear on success.
+# shellcheck disable=SC2064  # we want HELPER_PATH/HELPER_BAK expanded at trap-set time
+trap "gh38_h_restore" EXIT INT TERM
+mv "$HELPER_PATH" "$HELPER_BAK"
+
+gh38_reset
+printf '100\n' > "$GH38_STATE/pr_issues"
+printf '200\n' > "$GH38_STATE/pr_number"
+printf -- '- [ ] do the thing\n' > "$GH38_STATE/issue_body"
+: > "$GH38_STATE/issue_comments"
+REAL_AUDIT_38H="$SHELL_ROOT/.claude/audit/audit.jsonl"
+audit_before_38h=$(wc -l < "$REAL_AUDIT_38H" 2>/dev/null | tr -d ' ' || echo 0)
+out38h=$(gh38_run "gh pr merge 200 --merge")
+rc38h=$?
+audit_after_38h=$(wc -l < "$REAL_AUDIT_38H" 2>/dev/null | tr -d ' ' || echo 0)
+new_lines_38h=$(( audit_after_38h - audit_before_38h ))
+new_tail_38h=$(tail -"$new_lines_38h" "$REAL_AUDIT_38H" 2>/dev/null)
+
+# Restore immediately so any later assertion failure doesn't leave the
+# helper missing for subsequent suite runs.
+gh38_h_restore
+trap - EXIT INT TERM
+
+if [ "$rc38h" = 0 ] \
+   && [ "$new_lines_38h" -ge 1 ] \
+   && printf '%s' "$new_tail_38h" | grep -q 'ac-closeout' \
+   && printf '%s' "$new_tail_38h" | grep -q 'helper-missing'; then
+  ok "ac-closeout: helper-missing fails open with audit warn (#31)"
+else
+  ng "ac-closeout: helper-missing audit warn missing (rc=$rc38h, new_lines=$new_lines_38h, tail=$new_tail_38h) (#31)"
+fi
+
 rm -rf "$GH38_DIR"
 
 # ---------- restore registry ----------
