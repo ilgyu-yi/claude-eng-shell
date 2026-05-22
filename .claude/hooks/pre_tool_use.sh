@@ -157,21 +157,34 @@ case "$tool" in
     # backmerge matcher's anchor style at line 142.
     if printf '%s' "$cmd" | grep -qE '\bgh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; then
       if ! should_skip ac-closeout; then
-        # shellcheck disable=SC1090,SC1091
-        . "$SHELL_ROOT/.claude/hooks/helpers/ac_closeout_gate.sh"
-        ac_pr=$(extract_pr_from_merge_cmd "$cmd" || true)
-        if [ -z "$ac_pr" ] && command -v gh >/dev/null 2>&1; then
-          ac_pr=$(gh pr view --json number -q .number 2>/dev/null || true)
+        # Presence-guarded source: a session whose hook routing pre-dates
+        # this helper's introduction would otherwise silently continue past
+        # a failed `.` and call undefined functions (rc=127), producing
+        # zero audit entries — the PR #30 dogfood signature (issue #31).
+        # SPEC §6.1 session-restart caveat.
+        ac_helper="$SHELL_ROOT/.claude/hooks/helpers/ac_closeout_gate.sh"
+        gate_loaded=0
+        if [ -f "$ac_helper" ]; then
+          # shellcheck disable=SC1090,SC1091
+          . "$ac_helper" && gate_loaded=1
         fi
-        if [ -n "$ac_pr" ]; then
-          pr_needs_closeout "$ac_pr"
-          ac_rc=$?
-          case "$ac_rc" in
-            0) block ac-closeout "linked issue has unchecked AC and no '## AC closeout' marker comment. Run: scripts/ac_closeout.sh $ac_pr (idempotent). Or SKIP_HOOKS=ac-closeout SKIP_REASON='<why>' for legitimate edge cases." ;;
-            2) audit_log warn ac-closeout notice "indeterminate (gh timeout / missing / malformed); merge allowed per fail-open" ;;
-          esac
+        if [ "$gate_loaded" != 1 ]; then
+          audit_log warn ac-closeout helper-missing "$ac_helper not loaded (file absent or source failed); merge allowed per fail-open. Restart claude-eng to pick up the helper."
         else
-          audit_log warn ac-closeout notice "could not resolve PR number from cmd or current branch; merge allowed per fail-open"
+          ac_pr=$(extract_pr_from_merge_cmd "$cmd" || true)
+          if [ -z "$ac_pr" ] && command -v gh >/dev/null 2>&1; then
+            ac_pr=$(gh pr view --json number -q .number 2>/dev/null || true)
+          fi
+          if [ -n "$ac_pr" ]; then
+            pr_needs_closeout "$ac_pr"
+            ac_rc=$?
+            case "$ac_rc" in
+              0) block ac-closeout "linked issue has unchecked AC and no '## AC closeout' marker comment. Run: scripts/ac_closeout.sh $ac_pr (idempotent). Or SKIP_HOOKS=ac-closeout SKIP_REASON='<why>' for legitimate edge cases." ;;
+              2) audit_log warn ac-closeout notice "indeterminate (gh timeout / missing / malformed); merge allowed per fail-open" ;;
+            esac
+          else
+            audit_log warn ac-closeout notice "could not resolve PR number from cmd or current branch; merge allowed per fail-open"
+          fi
         fi
       fi
     fi

@@ -2399,7 +2399,7 @@ if [ "$rc38h" = 0 ] \
    && printf '%s' "$new_tail_38h" | grep -q 'helper-missing'; then
   ok "ac-closeout: helper-missing fails open with audit warn (#31)"
 else
-  ng "ac-closeout: helper-missing audit warn missing (rc=$rc38h, new_lines=$new_lines_38h, tail=$new_tail_38h) (#31)"
+  ng "ac-closeout: helper-missing audit warn missing (rc=$rc38h, out=$out38h, new_lines=$new_lines_38h, tail=$new_tail_38h) (#31)"
 fi
 
 rm -rf "$GH38_DIR"
