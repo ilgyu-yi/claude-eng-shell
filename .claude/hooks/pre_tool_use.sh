@@ -151,7 +151,11 @@ case "$tool" in
     # SPEC §6.1 'ac-closeout' row; helper scripts/ac_closeout.sh satisfies
     # by construction; /ship step 7.6 runs it automatically. Fail-open
     # (audit warn) on indeterminate state per SPEC §6.1 framing.
-    if printf '%s' "$cmd" | grep -qE '\bgh\s+pr\s+merge\b'; then
+    # Anchored end (\s|$) so future `gh pr merge-queue` or similar
+    # subcommands don't false-positive — `\b` alone would have matched
+    # `merge-queue` because `-` is a non-word boundary. Matches the
+    # backmerge matcher's anchor style at line 142.
+    if printf '%s' "$cmd" | grep -qE '\bgh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; then
       if ! should_skip ac-closeout; then
         # shellcheck disable=SC1090,SC1091
         . "$SHELL_ROOT/.claude/hooks/helpers/ac_closeout_gate.sh"

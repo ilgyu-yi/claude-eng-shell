@@ -21,16 +21,24 @@ extract_pr_from_merge_cmd() {
   # Strip up to and including `gh pr merge`; the remainder is the argv.
   # No `\b` — BSD sed (macOS) doesn't recognize it. The grep matcher in
   # pre_tool_use.sh already validated that `gh pr merge` is present as a
-  # token, so plain `.*gh[[:space:]]+pr[[:space:]]+merge` is sufficient.
+  # token (with end-anchor so `merge-queue` doesn't slip past), so plain
+  # `.*gh[[:space:]]+pr[[:space:]]+merge` is sufficient.
   rest=$(printf '%s' "$cmd" | sed -nE 's/.*gh[[:space:]]+pr[[:space:]]+merge//p')
   # Collapse runs of whitespace so word-split picks tokens cleanly.
   rest=$(printf '%s' "$rest" | tr -s '[:space:]')
+  # `set -f` disables pathname expansion so a literal `*` in cmd args
+  # (extremely unlikely for `gh pr merge` but defensive — matches the
+  # check_destructive_args style in pre_tool_use.sh).
+  local _opts=$-
+  set -f
   for token in $rest; do
     case "$token" in
       -*) continue ;;
-      [0-9]*) printf '%s' "$token"; return 0 ;;
+      *[!0-9]*) continue ;;   # only pure-integer tokens count as PR number
+      [0-9]*) case "$_opts" in *f*) ;; *) set +f ;; esac; printf '%s' "$token"; return 0 ;;
     esac
   done
+  case "$_opts" in *f*) ;; *) set +f ;; esac
   return 1
 }
 
