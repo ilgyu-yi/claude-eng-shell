@@ -108,13 +108,131 @@ path_in_scope "$SHELL_ROOT/.claude/CLAUDE.md" && ok "path_in_scope: shell self a
 . "$SHELL_ROOT/.claude/hooks/helpers/secret_scan.sh"
 SCAN_DIR=$(mktemp -d)
 (
-  cd "$SCAN_DIR"
+  cd "$SCAN_DIR" || exit 1
   git init -q
   printf 'aws_key = "AKIAIOSFODNN7EXAMPLE"\n' > leak.txt
   git add leak.txt
   scan_staged_secrets >/dev/null 2>&1 && echo PASSED_LEAK_TEST_WRONG || echo DETECTED_OK
 ) | grep -q DETECTED_OK && ok "secret_scan: AWS key detected" || ng "secret_scan should detect AWS key"
 rm -rf "$SCAN_DIR"
+
+# 6b: positive — leak on a non-ignored file emits `file:line: <id>` marker (#25).
+# Capture-then-grep instead of `subshell | grep -q`: `grep -q` exits on first
+# match, sends SIGPIPE upstream, and the subshell exits 141. Under the
+# smoke's `set -uo pipefail` the SIGPIPE propagates as the pipeline status
+# and falsely fires the failure branch. Capture closes the pipe cleanly.
+SCAN_6B=$(mktemp -d)
+scan_6b_out=$(
+  cd "$SCAN_6B" || exit 1
+  git init -q
+  mkdir -p src
+  printf 'aws_key = "AKIAIOSFODNN7EXAMPLE"\n' > src/foo.py
+  git add src/foo.py
+  # shellcheck disable=SC2069  # intentional: stderr → captured stdout, stdout discarded
+  scan_staged_secrets 2>&1 >/dev/null
+)
+if printf '%s\n' "$scan_6b_out" | grep -qE 'src/foo\.py:[0-9]+:.*(aws|AKIA)'; then
+  ok "secret_scan: emits file:line:<id> on non-ignored hit (#25)"
+else
+  ng "secret_scan: should emit file:line:<id> marker (#25)"
+fi
+rm -rf "$SCAN_6B"
+
+# 6c: allow-list — leak on a path matched by HEAD's .shellsecretignore is
+# skipped. .shellsecretignore must be committed FIRST (read from HEAD per
+# security review MEDIUM-1) — staging-only does not take effect, which is
+# locked by §6g below.
+SCAN_6C=$(mktemp -d)
+(
+  cd "$SCAN_6C" || exit 1
+  git init -q
+  mkdir -p docs
+  printf 'docs/\n' > .shellsecretignore
+  git add .shellsecretignore
+  git -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m 'chore: allow-list docs/'
+  printf 'aws_key = "AKIAIOSFODNN7EXAMPLE"\n' > docs/example.md
+  git add docs/example.md
+  scan_staged_secrets >/dev/null 2>&1 && echo NO_BLOCK || echo BLOCKED
+) | grep -q NO_BLOCK \
+  && ok "secret_scan: HEAD .shellsecretignore entry skips matching paths (#25)" \
+  || ng "secret_scan: allow-list entry did not skip the path (#25)"
+rm -rf "$SCAN_6C"
+
+# 6d: regression — without .shellsecretignore the legacy block path stands (#25).
+SCAN_6D=$(mktemp -d)
+(
+  cd "$SCAN_6D" || exit 1
+  git init -q
+  mkdir -p docs
+  # No .shellsecretignore created.
+  printf 'aws_key = "AKIAIOSFODNN7EXAMPLE"\n' > docs/example.md
+  git add docs/example.md
+  scan_staged_secrets >/dev/null 2>&1 && echo PASSED_LEAK_TEST_WRONG || echo DETECTED_OK
+) | grep -q DETECTED_OK \
+  && ok "secret_scan: missing .shellsecretignore preserves legacy block (#25)" \
+  || ng "secret_scan: missing-allow-list regression — leak slipped through (#25)"
+rm -rf "$SCAN_6D"
+
+# 6e: parser-bypass attempt — a content line starting with `++ ` must NOT
+# be misparsed as a `+++ b/<path>` header. Security review #26 HIGH-1.
+SCAN_6E=$(mktemp -d)
+(
+  cd "$SCAN_6E" || exit 1
+  git init -q
+  mkdir -p src
+  # First line is `++ b/x/tests/sneaky.py` (would become `+++ b/...` in diff
+  # if naive parser treated it as a header) — second line is a real leak.
+  # If the parser bug existed, file would re-tag to x/tests/sneaky.py and
+  # the `tests/` allow-list entry (committed below) would skip the leak.
+  printf '%s\n%s\n' '++ b/x/tests/sneaky.py' 'aws_key = "AKIAIOSFODNN7EXAMPLE"' > src/foo.py
+  # Stage with a HEAD-committed allow-list that skips tests/ — the exploit
+  # depended on this redirect.
+  printf 'tests/\n' > .shellsecretignore
+  git add .shellsecretignore
+  git -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m 'allow-list'
+  git add src/foo.py
+  scan_staged_secrets >/dev/null 2>&1 && echo PASSED_LEAK_TEST_WRONG || echo DETECTED_OK
+) | grep -q DETECTED_OK \
+  && ok "secret_scan: '++ ' content line is not misparsed as header (#25)" \
+  || ng "secret_scan: parser-bypass — '++ ' content reassigns file (#25)"
+rm -rf "$SCAN_6E"
+
+# 6f: PEM private-key detection — patterns beginning with `-` must not be
+# silently consumed by BSD-grep option-parsing. Security review #26 HIGH-2.
+SCAN_6F=$(mktemp -d)
+(
+  cd "$SCAN_6F" || exit 1
+  git init -q
+  cat > leak.key <<'PEM'
+-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEA0bogus_does_not_matter_for_detection_test
+-----END RSA PRIVATE KEY-----
+PEM
+  git add leak.key
+  scan_staged_secrets >/dev/null 2>&1 && echo PASSED_LEAK_TEST_WRONG || echo DETECTED_OK
+) | grep -q DETECTED_OK \
+  && ok "secret_scan: PEM private-key pattern fires (BSD-grep -- guard) (#25)" \
+  || ng "secret_scan: PEM private-key silently skipped (BSD-grep regression) (#25)"
+rm -rf "$SCAN_6F"
+
+# 6g: same-commit self-bypass — staging .shellsecretignore alongside a
+# secret must not take effect (allow-list is read from HEAD, not the
+# working tree). Security review #26 MEDIUM-1.
+SCAN_6G=$(mktemp -d)
+(
+  cd "$SCAN_6G" || exit 1
+  git init -q
+  mkdir -p docs
+  # No prior commit — so HEAD has no .shellsecretignore. Stage a permissive
+  # entry alongside the leak; the scan should NOT honor the new entry.
+  printf '*\n' > .shellsecretignore
+  printf 'aws_key = "AKIAIOSFODNN7EXAMPLE"\n' > docs/example.md
+  git add .shellsecretignore docs/example.md
+  scan_staged_secrets >/dev/null 2>&1 && echo BYPASS_WRONG || echo BLOCKED_OK
+) | grep -q BLOCKED_OK \
+  && ok "secret_scan: same-commit .shellsecretignore does not self-bypass (#25)" \
+  || ng "secret_scan: same-commit allow-list bypass — security regression (#25)"
+rm -rf "$SCAN_6G"
 
 # ---------- 7. pre_tool_use integration: block behavior ----------
 fake_input() {
