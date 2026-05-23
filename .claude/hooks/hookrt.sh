@@ -87,7 +87,7 @@ audit_log() {
 #
 # The reason field includes a truncated cmd snippet so the operator can
 # diagnose which command surfaced the anomalous state. Truncation cap is
-# 200 chars; longer cmds get an ellipsis sentinel.
+# 200 chars; longer cmds get an ellipsis sentinel (U+2026).
 pass_through_trace() {
   local category="$1" cmd="$2"
   local trunc="$cmd"
