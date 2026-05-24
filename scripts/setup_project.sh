@@ -82,8 +82,15 @@ ensure_field() {
     | jq -r --arg name "$name" '.fields[]? | select(.name==$name) | .name' \
     | head -1)
   if [ -n "$present" ]; then
-    echo "  field '$name' exists — skipped"
-    audit_log info project-setup skipped "field: $name" 2>/dev/null || true
+    # Field exists; for SINGLE_SELECT, reconcile options additively (issue #76).
+    # Non-SINGLE_SELECT (TEXT/NUMBER) has no options to reconcile — keep the
+    # pre-#76 "skipped" message and audit line.
+    if [ "$data_type" = SINGLE_SELECT ] && [ -n "$options" ]; then
+      dr_reconcile_select_options "$project_num" "$owner" "$name" "$options"
+    else
+      echo "  field '$name' exists — skipped"
+      audit_log info project-setup skipped "field: $name" 2>/dev/null || true
+    fi
     return 0
   fi
   if [ "$data_type" = SINGLE_SELECT ]; then

@@ -120,3 +120,101 @@ dr_find_project() {
   DR_PROJECT_NUM="$existing"
   return 0
 }
+
+# Reconcile a SINGLE_SELECT field's options additively (issue #76).
+# Diffs declared options against the field's current options; on non-empty
+# diff, invokes the updateProjectV2Field GraphQL mutation with the UNION
+# (current ∪ declared) so user-added options outside the declared set are
+# preserved. Idempotent: empty diff is a no-op with an aligned-stdout marker.
+#
+# Cosmetic note: the GraphQL mutation replaces option color metadata; new
+# options default to GRAY, and existing options' colors are not preserved
+# (the `gh project field-list` JSON does not surface option colors, so a
+# read-and-restore round-trip would require a second GraphQL query). Names
+# and option name-matching for selection references are preserved.
+#
+# Safety note: option names are interpolated directly into the GraphQL
+# mutation string. Names containing `"` or `\` are not supported — they
+# would break the mutation parse and trigger the audit warn path. The
+# three declared sets (Type/Status/Priority) all use alphanumeric + space
+# names; the additive-preservation path reads back user-added names from
+# GitHub via `gh project field-list`, so a user who manually created an
+# option with a quote/backslash is the only scenario that hits this. If
+# real friction surfaces, escape via `${o//\\/\\\\}` then `${o//\"/\\\"}`
+# before interpolation.
+#
+# Args: <project_num> <owner> <field_name> <declared_csv>
+# rc:   0 always (failures emit audit warn but do not propagate — the
+#       additive contract means a missed reconcile is not substrate-breaking,
+#       just user-visible drift on the next file-directive attempt).
+dr_reconcile_select_options() {
+  local proj="$1" own="$2" fname="$3" decl="$4"
+  local fields_json fid current_opts missing_opts union_opts
+  fields_json=$(gh project field-list "$proj" --owner "$own" --format json --limit 100 2>/dev/null) || {
+    audit_log warn "$DR_AUDIT_CATEGORY" notice "reconcile-skip: field-list failed for '$fname'" 2>/dev/null || true
+    return 0
+  }
+  fid=$(printf '%s' "$fields_json" | jq -r --arg name "$fname" '.fields[]? | select(.name==$name) | .id // empty' | head -1)
+  if [ -z "$fid" ]; then
+    audit_log warn "$DR_AUDIT_CATEGORY" notice "reconcile-skip: field '$fname' not found" 2>/dev/null || true
+    return 0
+  fi
+  current_opts=$(printf '%s' "$fields_json" \
+    | jq -r --arg name "$fname" '.fields[]? | select(.name==$name) | .options[]?.name // empty' \
+    | tr '\n' ',' | sed 's/,$//')
+  # Diff: missing = declared − current.
+  missing_opts=""
+  local IFS_save="$IFS"
+  IFS=','
+  local -a dec_arr=()
+  read -ra dec_arr <<< "$decl"
+  IFS="$IFS_save"
+  local opt
+  for opt in "${dec_arr[@]}"; do
+    [ -z "$opt" ] && continue
+    if ! printf ',%s,' "$current_opts" | grep -qF ",$opt,"; then
+      missing_opts="${missing_opts:+$missing_opts,}$opt"
+    fi
+  done
+  if [ -z "$missing_opts" ]; then
+    echo "  field '$fname' (SINGLE_SELECT) — options already aligned"
+    audit_log info "$DR_AUDIT_CATEGORY" skipped "field: $fname options-aligned" 2>/dev/null || true
+    return 0
+  fi
+  # Union for the mutation payload (additive — preserve user-added options).
+  if [ -n "$current_opts" ]; then
+    union_opts="$current_opts,$missing_opts"
+  else
+    union_opts="$missing_opts"
+  fi
+  # Build the GraphQL singleSelectOptions list literal (enum colors NOT quoted).
+  local gql_opts="" first=1 o
+  IFS=','
+  local -a all_arr=()
+  read -ra all_arr <<< "$union_opts"
+  IFS="$IFS_save"
+  for o in "${all_arr[@]}"; do
+    [ -z "$o" ] && continue
+    if [ "$first" = 1 ]; then first=0; else gql_opts="$gql_opts, "; fi
+    gql_opts="${gql_opts}{name: \"$o\", color: GRAY, description: \"\"}"
+  done
+  local mutation
+  mutation=$(cat <<GQL
+mutation {
+  updateProjectV2Field(input: {
+    fieldId: "$fid",
+    singleSelectOptions: [$gql_opts]
+  }) { projectV2Field { ... on ProjectV2SingleSelectField { name } } }
+}
+GQL
+)
+  if gh api graphql -f query="$mutation" >/dev/null 2>&1; then
+    local n_added
+    n_added=$(printf '%s' "$missing_opts" | tr ',' '\n' | grep -c .)
+    echo "  field '$fname' (SINGLE_SELECT) — $n_added option(s) added"
+    audit_log info "$DR_AUDIT_CATEGORY" reconciled "field: $fname options=+$n_added" 2>/dev/null || true
+  else
+    audit_log warn "$DR_AUDIT_CATEGORY" notice "reconcile-failed: '$fname' graphql-mutation-failed" 2>/dev/null || true
+  fi
+  return 0
+}
