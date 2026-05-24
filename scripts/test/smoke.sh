@@ -3145,6 +3145,14 @@ fi
 # Default-unset → no-op so smoke stays offline + deterministic (preserves the
 # 278/278 baseline). See SPEC §4.9.3 for the routing-regression contract this
 # block protects.
+#
+# Surface note: `claude -p --agent <name>` is the CLI session-agent override,
+# which resolves the agent from `.claude/agents/*.md` at subprocess startup.
+# This is a different invocation surface than the in-session `Agent({subagent_type:
+# "<name>"})` tool dispatch that SPEC §4.9.3's session-restart caveat is written
+# against; the two share the `.claude/agents/*.md` enumeration source but are
+# separate code paths. §42e protects the CLI surface; the in-session dispatch
+# is covered by Signal 1's session-trace evidence captured in the PR body.
 if [ "${CLAUDE_ENG_BEHAVIORAL_SMOKE:-}" = 1 ]; then
   if ! command -v claude >/dev/null 2>&1; then
     ng "42e: CLAUDE_ENG_BEHAVIORAL_SMOKE=1 but 'claude' CLI not on PATH (#69)"
@@ -3182,12 +3190,21 @@ Keep `scripts/test/smoke.sh`'s default-unset path at exactly 278 passing asserti
 First Directive in this synthetic test environment — bootstraps the Goal slot per directive-reviewer rule "The first Directive in a repo bootstraps the Goal slot".
 PROMPT_EOF
     dr_ship_out=$(claude -p --agent directive-reviewer "$dr_ship_prompt" 2>&1 || true)
-    dr_ship_verdict=$(printf '%s\n' "$dr_ship_out" | tail -n 20 | grep -E '^VERDICT:' | tail -1)
+    # Capture the LAST `^VERDICT:` line anchored on the documented delimiters
+    # (`ship —`, `refine:`, `block:` per .claude/agents/directive-reviewer.md:78-82).
+    # Anchoring avoids matching prose quotes of the agent's own `## Verdict
+    # dispatch` section if the agent cites itself; `tail -1` picks the terminal
+    # verdict if multiple anchored lines somehow appear.
+    dr_ship_verdict=$(printf '%s\n' "$dr_ship_out" | grep -E '^VERDICT: (ship —|ship -|refine:|block:)' | tail -1)
     case "$dr_ship_verdict" in
       "VERDICT: ship"*)
         ok "42e-ship: directive-reviewer returns 'ship' on minimal-but-valid synthetic body (#69)" ;;
       *)
-        ng "42e-ship: expected '^VERDICT: ship', got '$dr_ship_verdict' (#69)" ;;
+        # On miss, surface the first 200 chars of the agent's output so the
+        # next operator can tell live-agent failures (auth, rate-limit, model
+        # overloaded) apart from genuine verdict regressions.
+        dr_ship_head=$(printf '%s' "$dr_ship_out" | head -c 200 | tr '\n' ' ')
+        ng "42e-ship: expected '^VERDICT: ship', got '$dr_ship_verdict' [out: $dr_ship_head] (#69)" ;;
     esac
 
     # Case B — synthetic body missing the entire ## Success signals heading.
@@ -3216,12 +3233,13 @@ Keep `scripts/test/smoke.sh`'s default-unset path at exactly 278 passing asserti
 First Directive in this synthetic test environment.
 PROMPT_EOF
     dr_refine_out=$(claude -p --agent directive-reviewer "$dr_refine_prompt" 2>&1 || true)
-    dr_refine_verdict=$(printf '%s\n' "$dr_refine_out" | tail -n 20 | grep -E '^VERDICT:' | tail -1)
+    dr_refine_verdict=$(printf '%s\n' "$dr_refine_out" | grep -E '^VERDICT: (ship —|ship -|refine:|block:)' | tail -1)
     case "$dr_refine_verdict" in
       "VERDICT: refine"*|"VERDICT: block"*)
         ok "42e-refine-or-block: directive-reviewer rejects body missing '## Success signals' (got '$dr_refine_verdict') (#69)" ;;
       *)
-        ng "42e-refine-or-block: expected '^VERDICT: refine' or '^VERDICT: block', got '$dr_refine_verdict' (#69)" ;;
+        dr_refine_head=$(printf '%s' "$dr_refine_out" | head -c 200 | tr '\n' ' ')
+        ng "42e-refine-or-block: expected '^VERDICT: refine' or '^VERDICT: block', got '$dr_refine_verdict' [out: $dr_refine_head] (#69)" ;;
     esac
   fi
 fi
