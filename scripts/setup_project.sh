@@ -31,51 +31,27 @@ else
   audit_log() { :; }
 fi
 
-# ---------- registry guard ----------
-TARGET=$(pwd -P)
-REGISTRY="$CLAUDE_ENG_SHELL_ROOT/.claude/state/registry.txt"
-if [ ! -f "$REGISTRY" ] || ! grep -qxF "$TARGET" "$REGISTRY"; then
-  echo "setup_project: refusing — '$TARGET' is not a registered target" >&2
-  echo "  Register first: $CLAUDE_ENG_SHELL_ROOT/scripts/register.sh '$TARGET'" >&2
-  audit_log block project-setup deny "unregistered-path: $TARGET" 2>/dev/null || true
-  exit 1
-fi
+# ---------- shared resolver helpers (issue #71) ----------
+# Pin script identity + audit category before sourcing the lib so its
+# stderr prefixes and audit lines stay attributed to setup_project. All
+# guard rcs are translated to `exit 1` to preserve pre-#71 behavior
+# (smoke §41 asserts non-zero, not specific codes).
+# shellcheck disable=SC2034  # used by sourced dir_mode_project_resolve.sh
+DR_SCRIPT_NAME=setup_project
+# shellcheck disable=SC2034  # used by sourced dir_mode_project_resolve.sh
+DR_AUDIT_CATEGORY=project-setup
+# shellcheck source=/dev/null
+. "$CLAUDE_ENG_SHELL_ROOT/scripts/lib/dir_mode_project_resolve.sh"
 
-# ---------- gh auth + scope check ----------
-if ! gh auth status >/dev/null 2>&1; then
-  echo "setup_project: gh is not authenticated" >&2
-  echo "  Run: gh auth login" >&2
-  audit_log block project-setup deny "gh-not-authenticated" 2>/dev/null || true
-  exit 1
-fi
+dr_check_registry_guard || exit 1
+dr_check_gh_auth || exit 1
+dr_check_gh_scope || exit 1
+dr_check_jq || exit 1
+dr_resolve_owner_repo || exit 1
 
-auth_blob=$(gh auth status 2>&1 || true)
-if ! printf '%s' "$auth_blob" | grep -iq "token scopes:.*project"; then
-  echo "setup_project: gh token is missing the 'project' scope" >&2
-  echo "  Refresh with: gh auth refresh -s project" >&2
-  audit_log block project-setup deny "missing-project-scope" 2>/dev/null || true
-  exit 1
-fi
-
-# ---------- owner + repo + project name ----------
-if ! command -v jq >/dev/null 2>&1; then
-  echo "setup_project: jq is required but not installed" >&2
-  exit 1
-fi
-
-repo_json=$(gh repo view --json owner,name 2>/dev/null) || {
-  echo "setup_project: gh repo view failed — is this a GitHub-linked repo?" >&2
-  audit_log block project-setup deny "no-gh-remote" 2>/dev/null || true
-  exit 1
-}
-owner=$(printf '%s' "$repo_json" | jq -r '.owner.login')
-repo_name=$(printf '%s' "$repo_json" | jq -r '.name')
-project_name="${CLAUDE_ENG_PROJECT_NAME:-$repo_name roadmap}"
-
-if [ -z "$owner" ] || [ "$owner" = null ]; then
-  echo "setup_project: could not resolve repo owner from gh repo view" >&2
-  exit 1
-fi
+owner="$DR_OWNER"
+repo_name="$DR_REPO_NAME"
+project_name="$DR_PROJECT_NAME"
 
 # ---------- find or create project ----------
 existing=$(gh project list --owner "$owner" --format json --limit 100 2>/dev/null \
