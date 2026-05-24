@@ -3079,12 +3079,14 @@ fi
 rm -rf "$SP_DIR"
 
 # ---------- 42. directive-reviewer subagent structural sanity (#44) ----------
-# Subagent behavior cannot be invoked from a smoke shell (Claude Code routes
-# Agent calls). What we can verify is the file's structural conformance to
-# the reviewer-subagent contract: frontmatter (name, description, tools),
-# required body sections, and the VERDICT-line format documented in the body.
-# Behavioral validation happens via actual /file-directive and
-# /complete-directive invocations once those commands ship in PR #45.
+# Structural assertions (42a-42d) verify the agent file's contract:
+# frontmatter (name, description, tools), required body sections, and the
+# VERDICT-line format documented in the body. These run by default.
+#
+# Behavioral validation lives in §42e below, gated behind
+# CLAUDE_ENG_BEHAVIORAL_SMOKE=1 — it shells out to the live agent and asserts
+# its VERDICT output on synthetic inputs (SPEC §4.9.3, issue #69 under
+# Directive #62). Default smoke stays deterministic and offline.
 
 DR_PATH="$SHELL_ROOT/.claude/agents/directive-reviewer.md"
 if [ ! -f "$DR_PATH" ]; then
