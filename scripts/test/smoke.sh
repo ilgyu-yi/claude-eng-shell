@@ -3426,6 +3426,17 @@ else
   fi
 fi
 
+# ---------- 47. SPEC §5.15 /reflect stub (#57) ----------
+# PR #53 introduced /reflect as a Markdown command but did not add a
+# numbered SPEC subsection. /ship step 10.5 and reflect.md both reference
+# "SPEC §5.15" — this assertion locks the section's existence so the
+# cross-references resolve.
+if grep -qE '^### 5\.15 `/reflect' "$SHELL_ROOT/SPEC.md"; then
+  ok "47: SPEC §5.15 /reflect stub present (#57)"
+else
+  ng "47: SPEC §5.15 /reflect stub missing — /ship step 10.5 and reflect.md reference it (#57)"
+fi
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"
