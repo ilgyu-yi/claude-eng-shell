@@ -7,7 +7,11 @@ Create a new Directive Draft Item in the dir-mode GitHub Project v2.
 
 ## Procedure
 
-1. **Resolve the Project.** Read `gh repo view --json owner,name` to derive the project name (`<repo-name> roadmap` unless `$CLAUDE_ENG_PROJECT_NAME` is set). Find the Project via `gh project list --owner <owner> --format json --limit 100 | jq` matching `.title==<project-name>`. If no Project exists, instruct the user to run `scripts/setup_project.sh` first and stop.
+1. **Resolve the Project** (deterministic gate, SPEC §1.7 Substrate guard, issue #71). Invoke `bash scripts/dir_mode_project.sh resolve` via the Bash tool. The script's exit code is the gate:
+   - **exit 0**: project found. Stdout contains a single line `<project-num>\t<owner>\t<project-name>`. Parse and proceed to step 2.
+   - **exit non-zero** (2 = no gh auth, 3 = no `project` scope, 4 = no `gh repo view`, 5 = no Project found, 6 = `jq` missing): **STOP**. Print the script's stderr verbatim. If exit code is 5, instruct the user to run `scripts/setup_project.sh`. Do not proceed to step 2.
+
+   **Substitution prohibition.** Do NOT synthesize a Project from any other GitHub artifact — milestones, labels, plain Issues, etc. The script's exit-0 path is the **only** signal that a real Project exists for this target. If the script exits non-zero, `/file-directive` halts; this is by design (SPEC §1.7).
 
 2. **Resolve the parent Goal.** Search the Project for an item with `Type=Goal` (via `gh project item-list <num> --owner <owner> --format json --limit 100`). If absent, ask the user whether to file a new Goal first, OR proceed with `Parent Goal: (no Goal item yet — bootstrap)` as the placeholder. If multiple Goals exist, ask which one this Directive serves.
 
@@ -42,7 +46,9 @@ Create a new Directive Draft Item in the dir-mode GitHub Project v2.
 
    Use `gh project item-edit --id <item-id> --field-id <field-id> --text <value>` (or `--single-select-option-id` for SINGLE_SELECT fields; resolve field IDs once via `gh project field-list`).
 
-7. **Audit log** — `audit_log info directive-file created "directive: <Objective summary> item=<item-id> priority=<P> confidence=<C>"`.
+7. **Audit log** — `audit_log info directive-file created "directive: <Objective summary> item=<item-id> priority=P<N> confidence=<C>"`.
+
+   The `item=<item-id>` token is **mandatory** — `<item-id>` is the Draft Item ID returned by step 5's `gh project item-create … --format json | jq -r '.id'`, always available by the time this step runs. Substituting `milestone=#N`, `issue=#N`, or any other identifier is a contract violation (issue #71). Smoke §50a scans `.claude/audit/audit.jsonl` after every CI run and fails on format drift.
 
 8. **Output** — print:
    ```
