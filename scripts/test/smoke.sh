@@ -2761,6 +2761,101 @@ fi
 
 rm -rf "$PT39_DIR"
 
+# ---------- 40. SessionStart hookrt-missing banner (#37) ----------
+# SPEC §6.5(c): when $CLAUDE_ENG_SHELL_ROOT is set AND
+# $CLAUDE_ENG_SHELL_ROOT/.claude/hooks/hookrt.sh is absent, session_start.sh
+# emits a once-per-session actionable banner to stderr (debounced via
+# TMPDIR stamp keyed on CLAUDE_SESSION_ID:-$PPID with `-hookrt` suffix),
+# layered on top of the existing per-invocation WARN diagnostic floor at
+# session_start.sh:34.
+#
+# Banner content carries a `Fix:` clause (the call to action); the
+# per-invocation WARN line does not. Smoke filters on `Fix:` to isolate
+# the banner from the diagnostic floor when both fire on the same call.
+#
+# 40a: fires when hookrt.sh missing on first SessionStart invocation.
+# 40b: stamp-debounce — fires exactly once across two same-session invocations.
+# 40c: silent when hookrt.sh present.
+
+SS_HOOKRT_PATH="$SHELL_ROOT/.claude/hooks/hookrt.sh"
+SS40_DIR=$(mktemp -d)
+SS40_BAK="$SS40_DIR/hookrt.sh.bak"
+SS40_TMPDIR="$SS40_DIR/tmp"
+mkdir -p "$SS40_TMPDIR"
+
+ss40_restore() {
+  if [ -n "${SS40_BAK:-}" ] && [ -f "$SS40_BAK" ] && [ ! -f "$SS_HOOKRT_PATH" ]; then
+    mv "$SS40_BAK" "$SS_HOOKRT_PATH"
+  fi
+}
+trap 'ss40_restore' EXIT INT TERM
+
+if [ ! -f "$SS_HOOKRT_PATH" ]; then
+  ng "40: hookrt.sh not present in repo (#37)"
+else
+  mv "$SS_HOOKRT_PATH" "$SS40_BAK"
+
+  # 40a: first invocation, fresh session, hookrt.sh missing → banner fires.
+  ss40a_session_id="smoke-40a-$$-$(date +%s%N 2>/dev/null || echo 0)"
+  ss40a_stderr=$(
+    (
+      cd "$TMP/fake" || exit 0
+      CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT" \
+      CLAUDE_SESSION_ID="$ss40a_session_id" \
+      TMPDIR="$SS40_TMPDIR" \
+        bash "$SHELL_ROOT/.claude/hooks/session_start.sh" </dev/null 2>&1 >/dev/null
+    )
+  )
+  ss40a_banner=$(printf '%s\n' "$ss40a_stderr" | grep -c 'hookrt-missing.*Fix:' || true)
+  if [ "$ss40a_banner" = 1 ]; then
+    ok "40a: hookrt.sh missing → banner fires once (#37)"
+  else
+    ng "40a: hookrt.sh missing — expected banner count=1; got=$ss40a_banner stderr=$ss40a_stderr (#37)"
+  fi
+
+  # 40b: second invocation, SAME session_id → stamp dedupes → banner does NOT refire.
+  ss40b_stderr=$(
+    (
+      cd "$TMP/fake" || exit 0
+      CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT" \
+      CLAUDE_SESSION_ID="$ss40a_session_id" \
+      TMPDIR="$SS40_TMPDIR" \
+        bash "$SHELL_ROOT/.claude/hooks/session_start.sh" </dev/null 2>&1 >/dev/null
+    )
+  )
+  ss40b_banner=$(printf '%s\n' "$ss40b_stderr" | grep -c 'hookrt-missing.*Fix:' || true)
+  if [ "$ss40b_banner" = 0 ]; then
+    ok "40b: second invocation same session → banner debounced to zero (#37)"
+  else
+    ng "40b: same-session second invocation — expected banner count=0 (debounced); got=$ss40b_banner stderr=$ss40b_stderr (#37)"
+  fi
+
+  # Restore hookrt.sh BEFORE 40c so the present-case has the real runtime.
+  mv "$SS40_BAK" "$SS_HOOKRT_PATH"
+  SS40_BAK=""
+
+  # 40c: fresh session, hookrt.sh present → banner does NOT fire.
+  ss40c_session_id="smoke-40c-$$-$(date +%s%N 2>/dev/null || echo 0)"
+  ss40c_stderr=$(
+    (
+      cd "$TMP/fake" || exit 0
+      CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT" \
+      CLAUDE_SESSION_ID="$ss40c_session_id" \
+      TMPDIR="$SS40_TMPDIR" \
+        bash "$SHELL_ROOT/.claude/hooks/session_start.sh" </dev/null 2>&1 >/dev/null
+    )
+  )
+  ss40c_banner=$(printf '%s\n' "$ss40c_stderr" | grep -c 'hookrt-missing.*Fix:' || true)
+  if [ "$ss40c_banner" = 0 ]; then
+    ok "40c: hookrt.sh present → banner silent (#37)"
+  else
+    ng "40c: hookrt.sh present — expected banner count=0; got=$ss40c_banner stderr=$ss40c_stderr (#37)"
+  fi
+fi
+
+trap - EXIT INT TERM
+rm -rf "$SS40_DIR"
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"
