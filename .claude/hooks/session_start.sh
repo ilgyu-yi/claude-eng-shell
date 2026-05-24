@@ -40,7 +40,7 @@ if [ ! -f "$hookrt" ]; then
   # the diagnostic floor that survives that failure mode.
   _hookrt_stamp="${TMPDIR:-/tmp}/claude-eng-banner-hookrt.${CLAUDE_SESSION_ID:-$PPID}"
   if [ ! -d "$_hookrt_stamp" ] && mkdir "$_hookrt_stamp" 2>/dev/null; then
-    printf '[claude-eng-shell] WARN hookrt-missing: hook enforcement OFF until restored. Fix: `git -C %s status` to inspect, then `git -C %s checkout -- .claude/hooks/hookrt.sh`, or re-clone via scripts/bootstrap.sh.\n' \
+    printf '[claude-eng-shell] WARN hookrt-missing: hook enforcement OFF until restored. Fix: `git -C %s status` to inspect tree state, then `git -C %s checkout -- .claude/hooks/hookrt.sh` to restore.\n' \
       "$SHELL_ROOT" "$SHELL_ROOT" >&2
   fi
   exit 0
