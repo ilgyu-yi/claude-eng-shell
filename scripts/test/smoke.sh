@@ -1595,16 +1595,18 @@ mkdir -p "$COAUTHOR_TMP/.claude/state"
 
 rm -rf "$COAUTHOR_TMP"
 
-# ---------- 34. README currency (#65) ----------
+# ---------- 34. README currency (#65, extended for directive-reviewer #58) ----------
 # README.md is the project's landing page. Lock that it names all
-# eight subagents, the --base flag, the operating modes, and the
-# bootstrap dependencies. Future agent additions / flag changes
-# fail-fast here if they forget to update the README.
+# nine subagents (eight engineering + one dir-mode), the --base flag,
+# the operating modes, and the bootstrap dependencies. Future agent
+# additions / flag changes fail-fast here if they forget to update
+# the README.
 README_MD="$SHELL_ROOT/README.md"
 
 for agent in explorer planner doc-writer test-writer \
              code-reviewer security-reviewer \
-             issue-reviewer plan-reviewer; do
+             issue-reviewer plan-reviewer \
+             directive-reviewer; do
   if grep -q "$agent" "$README_MD" 2>/dev/null; then
     ok "readme: names subagent '$agent' (#65)"
   else
