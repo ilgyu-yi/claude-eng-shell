@@ -128,6 +128,16 @@ ensure_field "Parent"          TEXT
 ensure_field "Confidence"      NUMBER
 ensure_field "Success Signals" TEXT
 
+# ---------- link project to repo ----------
+# Best-effort: gh project link is idempotent server-side (re-linking the same
+# project to the same repo is a no-op). Suppress stdout; report on failure only.
+if ! gh project link "$project_num" --owner "$owner" --repo "$owner/$repo_name" >/dev/null 2>&1; then
+  echo "  warn: failed to link project #$project_num to $owner/$repo_name (manual link via UI required)" >&2
+  audit_log warn project-setup notice "project-link-failed: $project_num → $owner/$repo_name" 2>/dev/null || true
+else
+  audit_log info project-setup linked "project: #$project_num → $owner/$repo_name" 2>/dev/null || true
+fi
+
 # ---------- iteration field (user-managed, ADR-0002) ----------
 iteration_present=$(gh project field-list "$project_num" --owner "$owner" --format json --limit 100 2>/dev/null \
   | jq -r '.fields[]? | select(.name=="Iteration") | .name' | head -1)

@@ -2861,7 +2861,9 @@ rm -rf "$SS40_DIR"
 # GitHub Project v2 substrate (SPEC §1.7, ADR-0002). The script:
 #   1. Refuses on unregistered target paths (registry guard).
 #   2. Refuses without `gh auth` + `project` scope.
-#   3. On first run: creates the Project (if absent) and the seven fields.
+#   3. On first run: creates the Project (if absent) and the six CLI-managed
+#      fields. The Iteration field is user-managed via GH UI per the gh CLI
+#      ITERATION-data-type limitation documented in ADR-0002.
 #   4. On rerun: queries existing fields and skips creates that already exist.
 #
 # §41 mocks `gh` via PATH overlay so the test runs without the `project` token
