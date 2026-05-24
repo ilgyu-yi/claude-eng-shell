@@ -3680,7 +3680,9 @@ fi
 #         "no project" → expect exit 5 + stderr names setup_project.sh.
 #         Case "project exists" → expect exit 0 + stdout `<num>\t<owner>\t<name>`.
 
-DIRECTIVE_FILE_AUDIT_CUTOFF="2026-05-25T00:00:00Z"
+# Cutoff = just after the last grandfathered directive-file entry (#54/#61/#62
+# all filed 2026-05-24T10:34:54Z). Catches any post-merge same-day filings.
+DIRECTIVE_FILE_AUDIT_CUTOFF="2026-05-24T11:00:00Z"
 AUDIT_FILE="$SHELL_ROOT/.claude/audit/audit.jsonl"
 
 # 50a — audit-format guard

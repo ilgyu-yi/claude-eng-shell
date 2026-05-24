@@ -31,6 +31,11 @@
 : "${DR_SCRIPT_NAME:=dir_mode_project}"
 : "${DR_AUDIT_CATEGORY:=project-resolve}"
 
+# Defensive: if the parent forgot to source hookrt.sh (or stub audit_log), the
+# lib's `audit_log ... 2>/dev/null || true` calls would emit `command not found`
+# to stderr before `|| true` swallows the rc. Stub here keeps stderr clean.
+command -v audit_log >/dev/null 2>&1 || audit_log() { :; }
+
 # rc=1 if cwd is not a registered target.
 dr_check_registry_guard() {
   local target registry

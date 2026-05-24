@@ -8,8 +8,8 @@ Create a new Directive Draft Item in the dir-mode GitHub Project v2.
 ## Procedure
 
 1. **Resolve the Project** (deterministic gate, SPEC §1.7 Substrate guard, issue #71). Invoke `bash scripts/dir_mode_project.sh resolve` via the Bash tool. The script's exit code is the gate:
-   - **exit 0**: project found. Stdout contains a single line `<project-num>\t<owner>\t<project-name>`. Parse and proceed to step 2.
-   - **exit non-zero** (2 = no gh auth, 3 = no `project` scope, 4 = no `gh repo view`, 5 = no Project found, 6 = `jq` missing): **STOP**. Print the script's stderr verbatim. If exit code is 5, instruct the user to run `scripts/setup_project.sh`. Do not proceed to step 2.
+   - **exit 0**: project found. Stdout contains a single line `<project-num>\t<owner>\t<project-name>` (tab-separated; the project-name may contain spaces — e.g., default `<repo-name> roadmap`). Parse via `IFS=$'\t' read -r project_num owner project_name <<<"$STDOUT"` (or equivalent tab-aware split) and proceed to step 2.
+   - **exit non-zero** (1 = registry guard, 2 = no gh auth, 3 = no `project` scope, 4 = no `gh repo view`, 5 = no Project found, 6 = `jq` missing): **STOP**. Print the script's stderr verbatim. If exit code is 5, instruct the user to run `scripts/setup_project.sh`. Do not proceed to step 2.
 
    **Substitution prohibition.** Do NOT synthesize a Project from any other GitHub artifact — milestones, labels, plain Issues, etc. The script's exit-0 path is the **only** signal that a real Project exists for this target. If the script exits non-zero, `/file-directive` halts; this is by design (SPEC §1.7).
 
