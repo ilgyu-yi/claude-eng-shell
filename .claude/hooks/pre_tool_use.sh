@@ -311,12 +311,33 @@ case "$tool" in
         # on any filer, no `is_trusted_filer` resolution needed.
         if [[ "$cmd" =~ gh[[:space:]]+issue[[:space:]]+edit[[:space:]]+([0-9]+).*--remove-label[[:space:]]+directive ]]; then
           block trusted-filer-mutate "Removing the 'directive' label declassifies an Issue and bypasses dir-mode review. Human-confirm required always (SPEC §1.5 filer-aware invariants). Or SKIP_HOOKS=trusted-filer-mutate SKIP_REASON='<why>' for legitimate edge cases."
-        # Sub-arm a: `gh issue close <N>` without `--reason completed`.
+        # Sub-arm a: `gh issue close <N>` — two-stage check.
+        #   Stage 1 (discussion-tier, SPEC §5.19, Issue #116): if the Issue
+        #     carries the `discussion` label, close MUST use `--reason completed`
+        #     OR `--reason not_planned` (the two paths from SPEC §5.19). Bare
+        #     close (no `--reason`) is blocked — discussion tier has exactly
+        #     two close paths.
+        #   Stage 2 (trusted-filer, existing): if not a discussion Issue, fall
+        #     through to the trusted-filer check — block close-without-`--reason
+        #     completed` on Issues authored by trusted filers (OWNER / MEMBER /
+        #     MAINTAINER / COLLABORATOR).
         elif [[ "$cmd" =~ gh[[:space:]]+issue[[:space:]]+close[[:space:]]+([0-9]+) ]]; then
           tf_issue="${BASH_REMATCH[1]}"
           tf_completed=
+          tf_not_planned=
           if [[ "$cmd" =~ --reason[[:space:]]+completed ]]; then tf_completed=1; fi
-          if [ -z "$tf_completed" ] && command -v is_trusted_filer >/dev/null 2>&1; then
+          if [[ "$cmd" =~ --reason[[:space:]]+not_planned ]]; then tf_not_planned=1; fi
+          # Stage 1: discussion-tier enforcement.
+          tf_is_discussion=
+          if [ -z "$tf_completed" ] && [ -z "$tf_not_planned" ] && command -v gh >/dev/null 2>&1; then
+            if gh issue view "$tf_issue" --json labels --jq '.labels[].name' 2>/dev/null | grep -qx discussion; then
+              tf_is_discussion=1
+            fi
+          fi
+          if [ -n "$tf_is_discussion" ]; then
+            block trusted-filer-mutate "Issue #${tf_issue} is discussion-tier (SPEC §5.19). Close via '/resolve-discussion ${tf_issue} --promoted-to <M>' (concrete Issue filed) or '/resolve-discussion ${tf_issue} --no-action \"<reason>\"' (nothing to do). Bare 'gh issue close' is blocked — discussion tier has exactly two close paths. Or SKIP_HOOKS=trusted-filer-mutate SKIP_REASON='<why>' for legitimate edge cases."
+          # Stage 2: trusted-filer enforcement (existing behavior).
+          elif [ -z "$tf_completed" ] && command -v is_trusted_filer >/dev/null 2>&1; then
             if is_trusted_filer "$tf_issue"; then
               block trusted-filer-mutate "Issue #${tf_issue} was authored by a trusted filer (OWNER / MEMBER / MAINTAINER / COLLABORATOR). Closing without --reason completed (i.e., not-planned or duplicate) requires human confirm. Use 'gh issue close ${tf_issue} --reason completed' if evidence of completion exists, or SKIP_HOOKS=trusted-filer-mutate SKIP_REASON='<why>' for legitimate edge cases."
             else
@@ -324,7 +345,7 @@ case "$tool" in
               decided=1
             fi
           else
-            # --reason completed OR helper unavailable → fail-open per §6.1.
+            # --reason completed / --reason not_planned OR helper unavailable → fail-open per §6.1.
             mark_allow trusted-filer-mutate
             decided=1
           fi
