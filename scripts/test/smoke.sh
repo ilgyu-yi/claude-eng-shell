@@ -4731,6 +4731,31 @@ sp_tmp_reg=$(mktemp); grep -vxF "$S60_TARGET" "$SHELL_ROOT/.claude/state/registr
 mv "$sp_tmp_reg" "$SHELL_ROOT/.claude/state/registry.txt"
 rm -rf "$S60_DIR"
 
+# ---------- 61. target-substrate foundation: ADR-0004 + SPEC §1.7 (#114) ----------
+# Issue #114 (foundation slice of Directive #107) lands the design foundation
+# for target-substrate installation: ADR-0004 declares the boundary expansion
+# (shell now installs `.github/` files + labels into targets via /onboard-dir-mode);
+# SPEC §1.7 names the "Substrate-in-target contract" subsection (three-tier
+# feature model + graceful-degradation principle + reversibility contract).
+# §61 is a static-file regression: catches "ADR-0004 removed" or "SPEC §1.7
+# subsection deleted" in a future PR.
+
+# §61a: ADR-0004 file exists.
+if [ -f "$SHELL_ROOT/docs/ADRs/0004-target-substrate-foundation.md" ]; then
+  ok "61a: ADR-0004 target-substrate-foundation exists (#114)"
+else
+  ng "61a: ADR-0004 target-substrate-foundation missing at docs/ADRs/0004-target-substrate-foundation.md (#114)"
+fi
+
+# §61b: SPEC §1.7 names the "Substrate-in-target contract" subsection AND
+# references ADR-0004.
+if grep -q "Substrate-in-target contract" "$SHELL_ROOT/SPEC.md" \
+   && grep -qE "ADR-0004|0004-target-substrate-foundation" "$SHELL_ROOT/SPEC.md"; then
+  ok "61b: SPEC §1.7 names 'Substrate-in-target contract' + ADR-0004 reference (#114)"
+else
+  ng "61b: SPEC §1.7 missing 'Substrate-in-target contract' subsection or ADR-0004 reference (#114)"
+fi
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"
