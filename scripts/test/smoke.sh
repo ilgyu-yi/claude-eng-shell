@@ -4932,6 +4932,26 @@ else
   ng "63f: /onboard-dir-mode missing ADR-0004 reference (#118)"
 fi
 
+# §63g: tier-2 dry-run produces label-create lines for BOTH status:proposed
+# AND status:blocked. Regression guard for the v0 parser bug (caught at
+# PR #119 code-review) where `:`-delimited parsing on `status:proposed:FBCA04...`
+# would split as name=status / color=proposed / desc=FBCA04:... silently
+# dropping the two `status:*` labels. The smoke §63d --tier 1 path didn't
+# exercise label parsing; §63g closes the gap.
+s63g_out=$("$SHELL_ROOT/scripts/onboard_target.sh" --tier 2 --dry-run 2>&1 || true)
+s63g_ok=1
+for required in "status:proposed" "status:blocked" "discussion" "task" "needs-triage"; do
+  if ! printf '%s' "$s63g_out" | grep -qE "gh label create '$required'"; then
+    s63g_ok=0
+    break
+  fi
+done
+if [ "$s63g_ok" = 1 ]; then
+  ok "63g: onboard_target --tier 2 --dry-run emits gh label create for all v3-bootstrap labels including status:proposed + status:blocked (#118)"
+else
+  ng "63g: onboard_target --tier 2 --dry-run missing one or more required labels (regression-guard for label-parser drift) (#118)"
+fi
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"

@@ -63,30 +63,45 @@ fi
 # ---------------------------------------------------------------
 # Tier 2 — labels
 # ---------------------------------------------------------------
+# Delegate to scripts/ensure_v3_labels.sh — the single source of truth for
+# the v3 label set (named, colored, described). Avoids duplicating the
+# spec here (canonical-substrate principle: one source of truth per
+# artifact type). Plus extra labels not in ensure_v3_labels.sh: directive,
+# P0/P1/P2/P3 — installed inline since those labels are not the v3-bootstrap
+# scope of ensure_v3_labels.sh.
 echo "onboard_target: tier 2 — installing 10-label v3 set..."
-LABELS_SPEC=(
-  "directive:0E8A16:Directive Issue (dir-mode, SPEC §1.7)"
-  "status:proposed:FBCA04:Directive proposed; awaiting maintainer triage (SPEC §2.1 v3)"
-  "status:blocked:B60205:Directive cannot proceed without external input (SPEC §5.17)"
-  "task:C5DEF5:Standalone task or small improvement (not parented under a Directive)"
-  "needs-triage:D4C5F9:Issue filed without a template — awaiting maintainer triage classification"
-  "discussion:FEF2C0:Observation or half-formed idea; close as promoted (#M) or no-action (SPEC §5.19)"
-  "P0:B60205:Priority 0 — drop everything"
-  "P1:D93F0B:Priority 1 — next"
-  "P2:FBCA04:Priority 2 — soon"
-  "P3:0E8A16:Priority 3 — eventually"
-)
-for spec in "${LABELS_SPEC[@]}"; do
-  name="${spec%%:*}"; rest="${spec#*:}"
-  color="${rest%%:*}"; desc="${rest#*:}"
+
+ensure_label() {
+  local name="$1" color="$2" desc="$3"
   if [ -n "$DRY_RUN" ]; then
-    echo "  [dry-run] would: gh label create '$name' --color '$color' --force"
-  else
-    gh label create "$name" --color "$color" --description "$desc" --force >/dev/null 2>&1 || \
-      echo "  warn: label '$name' install failed (non-fatal; existing labels often differ in description-only)"
+    printf "  [dry-run] would: gh label create '%s' --color '%s' --force\n" "$name" "$color"
+    return 0
   fi
-done
-echo "onboard_target: tier 2 labels done."
+  gh label create "$name" --color "$color" --description "$desc" --force >/dev/null 2>&1 || \
+    printf "  warn: label '%s' install failed (non-fatal; existing labels often differ in description-only)\n" "$name"
+}
+
+# v3-bootstrap labels (mirror of scripts/ensure_v3_labels.sh — call it
+# directly when not dry-run to inherit any future updates there).
+if [ -n "$DRY_RUN" ]; then
+  # Mirror the spec inline for dry-run visibility.
+  ensure_label "status:proposed" "FBCA04" "Directive proposed; awaiting maintainer triage (SPEC §2.1 v3)"
+  ensure_label "status:blocked"  "B60205" "Directive cannot proceed without external input (SPEC §5.17)"
+  ensure_label "task"            "C5DEF5" "Standalone task or small improvement (not parented under a Directive)"
+  ensure_label "needs-triage"    "D4C5F9" "Issue filed without a template — awaiting maintainer triage classification"
+  ensure_label "discussion"      "FEF2C0" "Observation or half-formed idea; close as promoted (#M) or no-action (SPEC §5.19)"
+else
+  bash "$CLAUDE_ENG_SHELL_ROOT/scripts/ensure_v3_labels.sh" 2>&1 | sed 's/^/  /'
+fi
+
+# Additional labels not in ensure_v3_labels.sh (directive + priorities).
+ensure_label "directive" "0E8A16" "Directive Issue (dir-mode, SPEC §1.7)"
+ensure_label "P0" "B60205" "Priority 0 — drop everything"
+ensure_label "P1" "D93F0B" "Priority 1 — next"
+ensure_label "P2" "FBCA04" "Priority 2 — soon"
+ensure_label "P3" "0E8A16" "Priority 3 — eventually"
+
+echo "onboard_target: tier 2 labels done (10 total: 5 from ensure_v3_labels.sh + 5 inline)."
 
 if [ "$TIER" = 2 ]; then
   audit_log info onboard-dir-mode created "target=$TARGET_OWNER_REPO tier=2 labels=10"
