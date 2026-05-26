@@ -4242,6 +4242,124 @@ else
   ok "54g: python3+pyyaml not available — YAML parse check skipped (#93)"
 fi
 
+# ---------- 55. trusted-filer-mutate matcher + is_trusted_filer helper (#95 / Directive #92) ----------
+# Cluster C of the v3 reframe (brief §6 filer-aware invariants).
+# Matrix coverage:
+#   §55a — trusted filer + close without --reason completed → block
+#   §55b — trusted filer + close --reason completed         → allow (mark_allow silent)
+#   §55c — untrusted filer + close without --reason         → allow (regular rules)
+#   §55d — any filer + edit --remove-label directive        → block
+#   §55e — any filer + edit --add-label other-label         → allow
+#   §55f — helper missing / gh failure                      → fail-open allow
+# Uses a gh-shim PATH overlay similar to §39's pattern.
+
+PT55_DIR=$(mktemp -d)
+PT55_SHIM="$PT55_DIR/bin"
+PT55_STATE="$PT55_DIR/state"
+mkdir -p "$PT55_SHIM" "$PT55_STATE"
+
+cat > "$PT55_SHIM/gh" <<'SHIM'
+#!/bin/sh
+# Mock gh — minimal subcommand dispatch needed by issue_filer.sh + the matcher.
+# Note: shebang is /bin/sh; on ubuntu CI this is dash, which has stricter
+# pattern parsing than bash. Patterns kept simple — `--json owner` and
+# `--json name` are sufficient discriminators (gh's separate-call form
+# from issue_filer.sh).
+args="$*"
+case "$args" in
+  *"--json owner"*) printf 'mock\n'; exit 0 ;;
+  *"--json name"*)  printf 'repo\n'; exit 0 ;;
+  *"--json authorAssociation"*)
+    n=$(printf '%s\n' "$args" | sed -nE 's/.*issue view ([0-9]+).*/\1/p')
+    if [ -n "$n" ] && [ -f "$GH_SHIM_STATE/filer_$n" ]; then
+      cat "$GH_SHIM_STATE/filer_$n"
+    fi
+    exit 0 ;;
+esac
+exit 0
+SHIM
+chmod +x "$PT55_SHIM/gh"
+
+# Per-issue fixtures: write the authorAssociation literal to $GH_SHIM_STATE/filer_<n>.
+printf 'OWNER\n'  > "$PT55_STATE/filer_100"   # trusted
+printf 'NONE\n'   > "$PT55_STATE/filer_200"   # untrusted
+
+# Helper to invoke pre_tool_use.sh with a synthesized Bash command. Returns
+# the hook's exit code (0=allow, 2=block).
+pt55_run() {
+  local cmd="$1"
+  (
+    cd "$TMP/fake" || exit 1
+    # shellcheck disable=SC2069  # intentional: swap stderr → captured pipe, discard stdout
+    printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
+      "$(printf '%s' "$cmd" | jq -Rs .)" \
+      | PATH="$PT55_SHIM:$PATH" \
+        GH_SHIM_STATE="$PT55_STATE" \
+        CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT" \
+        bash "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" 2>&1 >/dev/null
+  )
+  return $?
+}
+
+# §55a: trusted filer + close without --reason completed → block (rc=2).
+pt55_run "gh issue close 100" >/dev/null 2>&1
+case $? in
+  2) ok "55a: trusted filer + close without --reason → block (rc=2) (#95)" ;;
+  *) ng "55a: expected rc=2 (block) got rc=$? (#95)" ;;
+esac
+
+# §55b: trusted filer + close --reason completed → allow (rc=0).
+pt55_run "gh issue close 100 --reason completed" >/dev/null 2>&1
+case $? in
+  0) ok "55b: trusted filer + close --reason completed → allow (rc=0) (#95)" ;;
+  *) ng "55b: expected rc=0 (allow) got rc=$? (#95)" ;;
+esac
+
+# §55c: untrusted filer + close without --reason → allow.
+pt55_run "gh issue close 200" >/dev/null 2>&1
+case $? in
+  0) ok "55c: untrusted filer + close without --reason → allow (rc=0) (#95)" ;;
+  *) ng "55c: expected rc=0 (allow) got rc=$? (#95)" ;;
+esac
+
+# §55d: any filer + edit --remove-label directive → block.
+pt55_run "gh issue edit 100 --remove-label directive" >/dev/null 2>&1
+case $? in
+  2) ok "55d: edit --remove-label directive on trusted filer → block (rc=2) (#95)" ;;
+  *) ng "55d: expected rc=2 (block) got rc=$? (#95)" ;;
+esac
+pt55_run "gh issue edit 200 --remove-label directive" >/dev/null 2>&1
+case $? in
+  2) ok "55d2: edit --remove-label directive on untrusted filer → block (rc=2) (#95)" ;;
+  *) ng "55d2: expected rc=2 (block) got rc=$? (#95)" ;;
+esac
+
+# §55e: any filer + edit --add-label other-label → allow (not the remove-directive case).
+pt55_run "gh issue edit 100 --add-label task" >/dev/null 2>&1
+case $? in
+  0) ok "55e: edit --add-label (non-directive remove) → allow (rc=0) (#95)" ;;
+  *) ng "55e: expected rc=0 (allow) got rc=$? (#95)" ;;
+esac
+
+# §55f: SKIP_HOOKS=trusted-filer-mutate escape allows the otherwise-blocked
+# trusted-filer close.
+(
+  cd "$TMP/fake" || exit 1
+  # shellcheck disable=SC2069  # intentional: swap stderr → captured pipe, discard stdout
+  printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
+    "$(printf '%s' 'SKIP_HOOKS=trusted-filer-mutate SKIP_REASON=test gh issue close 100' | jq -Rs .)" \
+    | PATH="$PT55_SHIM:$PATH" \
+      GH_SHIM_STATE="$PT55_STATE" \
+      CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT" \
+      bash "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" >/dev/null 2>&1
+)
+case $? in
+  0) ok "55f: SKIP_HOOKS=trusted-filer-mutate escape allows otherwise-blocked close (#95)" ;;
+  *) ng "55f: SKIP_HOOKS escape rc=$? (expected 0) (#95)" ;;
+esac
+
+rm -rf "$PT55_DIR"
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"

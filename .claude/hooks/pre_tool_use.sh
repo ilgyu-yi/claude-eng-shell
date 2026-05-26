@@ -25,6 +25,7 @@ safe_source "$SHELL_ROOT/.claude/hooks/helpers/conventional_commit.sh"  commit-f
 safe_source "$SHELL_ROOT/.claude/hooks/helpers/secret_scan.sh"          secret           || true
 safe_source "$SHELL_ROOT/.claude/hooks/helpers/git_matcher.sh"          commit-format    || true
 safe_source "$SHELL_ROOT/.claude/hooks/helpers/issue_type.sh"           directive-protect || true
+safe_source "$SHELL_ROOT/.claude/hooks/helpers/issue_filer.sh"          trusted-filer-mutate || true
 
 # If cwd_guard.sh wasn't loaded, `in_scope` is undefined → rc=127 → exit 0
 # (the matcher would have nothing to guard anyway). safe_source has
@@ -283,6 +284,57 @@ case "$tool" in
         decided=1
       fi
       [ -z "$decided" ] && pass_through_trace directive-protect "$cmd"
+    fi
+
+    # trusted-filer-mutate — block close / declassify mutations against
+    # Issues authored by trusted filers (OWNER / MEMBER / MAINTAINER /
+    # COLLABORATOR per GitHub's authorAssociation). Mode-independent layer
+    # above attended/unattended per SPEC §1.5 (filer-aware invariants).
+    # Two sub-arms:
+    #   a) `gh issue close <N>` without `--reason completed` AND on a
+    #      trusted-filer Issue → block (close-as-not-planned and
+    #      close-as-duplicate are the harmful cases the invariant guards
+    #      against). Allowed: `--reason completed` regardless of filer.
+    #   b) `gh issue edit <N> --remove-label directive` on ANY Issue →
+    #      block (de-classifying a Directive bypasses dir-mode review
+    #      and should always require human confirm).
+    # Both arms escape via `SKIP_HOOKS=trusted-filer-mutate SKIP_REASON='<why>'`.
+    # Fail-open if is_trusted_filer is unavailable or can't resolve (gh
+    # down, no auth) — the underlying action proceeds under the existing
+    # attended/unattended rules.
+    if printf '%s' "$cmd" | grep -qE '\bgh[[:space:]]+issue[[:space:]]+(close|edit)\b'; then
+      decided=
+      if should_skip trusted-filer-mutate; then
+        decided=1
+      else
+        # Sub-arm b: `gh issue edit <N> --remove-label directive` blocks
+        # on any filer, no `is_trusted_filer` resolution needed.
+        if [[ "$cmd" =~ gh[[:space:]]+issue[[:space:]]+edit[[:space:]]+([0-9]+).*--remove-label[[:space:]]+directive ]]; then
+          block trusted-filer-mutate "Removing the 'directive' label declassifies an Issue and bypasses dir-mode review. Human-confirm required always (SPEC §1.5 filer-aware invariants). Or SKIP_HOOKS=trusted-filer-mutate SKIP_REASON='<why>' for legitimate edge cases."
+        # Sub-arm a: `gh issue close <N>` without `--reason completed`.
+        elif [[ "$cmd" =~ gh[[:space:]]+issue[[:space:]]+close[[:space:]]+([0-9]+) ]]; then
+          tf_issue="${BASH_REMATCH[1]}"
+          tf_completed=
+          if [[ "$cmd" =~ --reason[[:space:]]+completed ]]; then tf_completed=1; fi
+          if [ -z "$tf_completed" ] && command -v is_trusted_filer >/dev/null 2>&1; then
+            if is_trusted_filer "$tf_issue"; then
+              block trusted-filer-mutate "Issue #${tf_issue} was authored by a trusted filer (OWNER / MEMBER / MAINTAINER / COLLABORATOR). Closing without --reason completed (i.e., not-planned or duplicate) requires human confirm. Use 'gh issue close ${tf_issue} --reason completed' if evidence of completion exists, or SKIP_HOOKS=trusted-filer-mutate SKIP_REASON='<why>' for legitimate edge cases."
+            else
+              mark_allow trusted-filer-mutate
+              decided=1
+            fi
+          else
+            # --reason completed OR helper unavailable → fail-open per §6.1.
+            mark_allow trusted-filer-mutate
+            decided=1
+          fi
+        else
+          # gh issue edit without --remove-label directive — out of scope.
+          mark_allow trusted-filer-mutate
+          decided=1
+        fi
+      fi
+      [ -z "$decided" ] && pass_through_trace trusted-filer-mutate "$cmd"
     fi
 
     # Force push
