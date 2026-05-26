@@ -23,7 +23,7 @@ The shell, via the future `/onboard-dir-mode` skill (deferred Execution Issue un
 
 - **Issue Form templates** — `.github/ISSUE_TEMPLATE/{directive-proposal,execution-under-directive,task,bug-report,discussion}.yml` + `config.yml`. Source-of-truth: `.claude/templates/target-substrate/ISSUE_TEMPLATE/` (deferred Execution Issue lands this directory).
 - **Workflow files** — `.github/workflows/{auto-needs-triage,issues-to-project-mirror,dir-mode-post-merge}.yml`. Source-of-truth: same canonical directory.
-- **Repo labels** — the 9-label v3 set (`directive`, `status:proposed`, `status:blocked`, `task`, `needs-triage`, `discussion`, `P0`, `P1`, `P2`, `P3`). Installed via `gh label create --force` invocations modeled on `scripts/ensure_v3_labels.sh`.
+- **Repo labels** — the 10-label v3 set (`directive`, `status:proposed`, `status:blocked`, `task`, `needs-triage`, `discussion`, `P0`, `P1`, `P2`, `P3`). Installed via `gh label create --force` invocations modeled on `scripts/ensure_v3_labels.sh`.
 - **Project v2** — created via `gh project create --owner <owner> --title "<repo-name> roadmap"` if absent. Field schema populated via `scripts/setup_project.sh` (idempotent — exits clean if already correct).
 
 SPEC §0.2's "scoped to `workspace/`" framing is broadened: scoped to `workspace/` + this typed allow-list of files/labels inside each target's `.github/` and label namespace. Anything outside this allow-list (CI configs, source code, READMEs, ARCHITECTURE docs) is **never** touched by the shell.
@@ -55,7 +55,7 @@ Targets adopt the shell at one of three tiers — each tier is a strict superset
 | Tier | Required artifacts | Features available |
 |---|---|---|
 | **Tier 1: eng-mode** | None beyond a default git repo with `main` branch + protected-branch settings the maintainer configures themselves | `/file-issue`, `/work-on`, `/ship`, secret scan, AC closeout, conventional-commit enforcement — the full engineering loop |
-| **Tier 2: dir-mode-with-labels** | Tier 1 + the 9-label v3 set installed via `scripts/ensure_v3_labels.sh` | Tier 1 + `/file-directive`, `/activate-directive`, `/complete-directive` writing to Issues directly. No Project mirror; no Issue templates; external contributors see no template chooser. |
+| **Tier 2: dir-mode-with-labels** | Tier 1 + the 10-label v3 set installed via `scripts/ensure_v3_labels.sh` | Tier 1 + `/file-directive`, `/activate-directive`, `/complete-directive` writing to Issues directly. No Project mirror; no Issue templates; external contributors see no template chooser. |
 | **Tier 3: full v3** | Tier 2 + `.github/ISSUE_TEMPLATE/*.yml` + `.github/workflows/{auto-needs-triage,issues-to-project-mirror,dir-mode-post-merge}.yml` + Project v2 with v3 field schema | Tier 2 + Issue template chooser for external contributors + `/triage` queue + Project-as-derived-view + mirror workflow. |
 
 Tier transitions are mechanical: downgrade by deleting the tier-N artifacts; upgrade by running the next stage of `/onboard-dir-mode`. Each tier is independently shippable — a target can sit at tier 2 indefinitely without ever upgrading to tier 3.
@@ -67,7 +67,7 @@ Dir-mode commands check substrate before acting. The rule (verbatim from Directi
 Examples (the principle is per-command; these are the test anchors):
 
 - `/file-issue` — works at **tier 1**. No substrate required.
-- `/file-directive` — hard-refuses at tier 1 (no `directive` label → no way to mark the Issue as a Directive). Works at **tier 2** (writes Issue with labels). Degrades-with-warning at tier 2 ("no Project mirror to write to — Issue body + labels still satisfy SSOT"). Full functionality at **tier 3**.
+- `/file-directive` — hard-refuses at **tier 1** (no `directive` label → no way to mark the Issue as a Directive). Works in **degraded mode at tier 2** (writes Issue with labels successfully + emits a one-line warning "no Project mirror to write to — Issue body + labels still satisfy SSOT"). Full functionality at **tier 3** (Issue body + labels + Project mirror all populated).
 - `/triage` — hard-refuses below **tier 3**. The triage queue (`needs-triage` + `status:proposed`) requires both the labels (tier 2) AND the `auto-needs-triage.yml` workflow that applies `needs-triage` to template-less filings (tier 3). Without the workflow, the queue is empty by construction.
 - `directive-reviewer` — at tier 2, the MISSION.md alignment check falls back to "no MISSION.md in target — treat as bootstrap allowance" (the existing v0 bootstrap allowance in `directive-reviewer.md`'s prompt).
 

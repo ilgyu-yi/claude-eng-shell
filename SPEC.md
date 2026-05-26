@@ -318,7 +318,7 @@ Dir-mode's substrate is installed into target repos under `workspace/` via the f
 **Three-tier feature model.** Targets adopt the shell at one of three tiers; each is a strict superset of the previous and tier transitions are mechanical:
 
 - **Tier 1: eng-mode** — no substrate required. `/file-issue`, `/work-on`, `/ship`, secret scan, AC closeout, conventional-commit enforcement.
-- **Tier 2: dir-mode-with-labels** — tier 1 + the 9-label v3 set (`directive`, `status:proposed`, `status:blocked`, `task`, `needs-triage`, `discussion`, `P0`-`P3`) installed via `scripts/ensure_v3_labels.sh`. Unlocks `/file-directive`, `/activate-directive`, `/complete-directive` writing to Issues directly. No Project mirror, no Issue templates.
+- **Tier 2: dir-mode-with-labels** — tier 1 + the 10-label v3 set (`directive`, `status:proposed`, `status:blocked`, `task`, `needs-triage`, `discussion`, `P0`, `P1`, `P2`, `P3`) installed via `scripts/ensure_v3_labels.sh`. Unlocks `/file-directive`, `/activate-directive`, `/complete-directive` writing to Issues directly. No Project mirror, no Issue templates.
 - **Tier 3: full v3** — tier 2 + `.github/ISSUE_TEMPLATE/*.yml` + `.github/workflows/{auto-needs-triage,issues-to-project-mirror,dir-mode-post-merge}.yml` + Project v2 (`<repo> roadmap`) with v3 field schema. Unlocks `/triage`, the template chooser for external contributors, and the Project-as-derived-view.
 
 **Bootstrap path.** `/onboard-dir-mode` (deferred) installs the tier-N artifacts via a **PR** to the target — never direct-push. Labels + Project install directly (not git-tracked); maintainer reverts via `gh label delete` / `gh project delete` per the reversibility contract below.
