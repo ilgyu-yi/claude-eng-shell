@@ -40,14 +40,26 @@ case "$TIER" in
 esac
 
 # Resolve target owner/repo (validates we're in a real gh repo context).
+# Dry-run skips the live-gh check so smoke and other no-network contexts
+# (CI runners without gh auth, sandbox testing) can exercise the script's
+# structural output without auth. Live runs still require gh + remote.
 if ! command -v gh >/dev/null 2>&1; then
-  echo "onboard_target: gh CLI not found" >&2
-  exit 1
-fi
-TARGET_OWNER_REPO=$(gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"' 2>/dev/null || true)
-if [ -z "$TARGET_OWNER_REPO" ]; then
-  echo "onboard_target: cannot resolve gh repo (cwd not in a gh-recognized git repo or gh not authed)" >&2
-  exit 1
+  if [ -n "$DRY_RUN" ]; then
+    TARGET_OWNER_REPO="<owner>/<repo>"
+  else
+    echo "onboard_target: gh CLI not found" >&2
+    exit 1
+  fi
+else
+  TARGET_OWNER_REPO=$(gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"' 2>/dev/null || true)
+  if [ -z "$TARGET_OWNER_REPO" ]; then
+    if [ -n "$DRY_RUN" ]; then
+      TARGET_OWNER_REPO="<owner>/<repo>"
+    else
+      echo "onboard_target: cannot resolve gh repo (cwd not in a gh-recognized git repo or gh not authed)" >&2
+      exit 1
+    fi
+  fi
 fi
 echo "onboard_target: target=$TARGET_OWNER_REPO tier=$TIER ${DRY_RUN:+(dry-run)}"
 
