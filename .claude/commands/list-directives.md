@@ -7,6 +7,8 @@ List Directive Issues filtered by Status label. Read-only; queries Issues direct
 
 ## Procedure
 
+0. **Step 0 — substrate preflight** (ADR-0004; #118): verify the target satisfies this command's tier requirement. Tier 2 minimum for all dir-mode commands (10-label v3 set must exist). If `gh label list | grep -qx directive` fails, exit with `"target lacks dir-mode substrate; run /onboard-dir-mode --tier 2 first"`. Fail-open on `gh` network errors per ADR-0004 reversibility framing.
+
 1. **Parse arguments**:
    - `--status <state>` — one of `Proposed | Active | Blocked | Completed | All`. Default: omit `Completed` (show Proposed + Active + Blocked).
 

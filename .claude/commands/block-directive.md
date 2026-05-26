@@ -11,6 +11,8 @@ Not reviewer-gated by `directive-reviewer` — blocking is an annotation, not a 
 
 ## Procedure
 
+0. **Step 0 — substrate preflight** (ADR-0004; #118): verify the target satisfies this command's tier requirement. Tier 2 minimum for all dir-mode commands (10-label v3 set must exist). If `gh label list | grep -qx directive` fails, exit with `"target lacks dir-mode substrate; run /onboard-dir-mode --tier 2 first"`. Fail-open on `gh` network errors per ADR-0004 reversibility framing.
+
 1. **Parse arguments** — `<issue-#>` is the GitHub Issue number; `--reason <why>` is **mandatory**. If `--reason` is missing or its value is empty after whitespace-trim: error ("--reason <why> is required for /block-directive") and stop.
 
 2. **Resolve the Issue** — fetch:
