@@ -76,7 +76,7 @@ jobs:
           # Derive Type from labels.
           labels_json=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json labels --jq '[.labels[].name]')
           type_val="Execution"
-          if printf '%s' "$labels_json" | jq -e 'any(. == "directive")' >/dev/null 2>&1; then
+          if printf '%s' "$labels_json" | jq -e 'index("directive") != null' >/dev/null 2>&1; then
             type_val="Directive"
           fi
           echo "type_val=$type_val" >> "$GITHUB_OUTPUT"
@@ -86,9 +86,9 @@ jobs:
           status_val="Active"
           if [ "$state" = "CLOSED" ]; then
             status_val="Completed"
-          elif printf '%s' "$labels_json" | jq -e 'any(. == "status:proposed")' >/dev/null 2>&1; then
+          elif printf '%s' "$labels_json" | jq -e 'index("status:proposed") != null' >/dev/null 2>&1; then
             status_val="Proposed"
-          elif printf '%s' "$labels_json" | jq -e 'any(. == "status:blocked")' >/dev/null 2>&1; then
+          elif printf '%s' "$labels_json" | jq -e 'index("status:blocked") != null' >/dev/null 2>&1; then
             status_val="Blocked"
           fi
           echo "status_val=$status_val" >> "$GITHUB_OUTPUT"
@@ -96,7 +96,7 @@ jobs:
           # Derive Priority from P0..P3 label (first match wins).
           priority_val=""
           for p in P0 P1 P2 P3; do
-            if printf '%s' "$labels_json" | jq -e --arg p "$p" 'any(. == $p)' >/dev/null 2>&1; then
+            if printf '%s' "$labels_json" | jq -e --arg p "$p" 'index($p) != null' >/dev/null 2>&1; then
               priority_val="$p"
               break
             fi

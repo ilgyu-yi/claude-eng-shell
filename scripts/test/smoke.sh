@@ -4489,15 +4489,21 @@ else
   ng "57c: workflow missing Type derivation (#96/cluster D)"
 fi
 
-# 57d: workflow names all 4 v3 Status values (Proposed/Active/Blocked/Completed).
+# 57d: workflow names all 4 v3 Status values AND the closed→Completed
+# precedence appears before status:proposed / status:blocked branches.
+# Brief §7 locks: closed → Completed beats label-driven branches.
 s57d_missing=""
 for state in Proposed Active Blocked Completed; do
   grep -q "$state" "$MIRROR_WF" 2>/dev/null || s57d_missing="$s57d_missing $state"
 done
-if [ -z "$s57d_missing" ]; then
-  ok "57d: workflow names all 4 v3 Status values (#96/cluster D)"
+s57d_closed_line=$(grep -n 'CLOSED' "$MIRROR_WF" 2>/dev/null | head -1 | cut -d: -f1)
+s57d_proposed_line=$(grep -n 'status:proposed' "$MIRROR_WF" 2>/dev/null | head -1 | cut -d: -f1)
+if [ -z "$s57d_missing" ] \
+   && [ -n "$s57d_closed_line" ] && [ -n "$s57d_proposed_line" ] \
+   && [ "$s57d_closed_line" -lt "$s57d_proposed_line" ]; then
+  ok "57d: workflow names all 4 v3 Status values + CLOSED→Completed precedes status:proposed (#96/cluster D)"
 else
-  ng "57d: workflow missing Status value:$s57d_missing (#96/cluster D)"
+  ng "57d: 57d status check failed: missing=$s57d_missing closed_line=$s57d_closed_line proposed_line=$s57d_proposed_line (#96/cluster D)"
 fi
 
 # 57e: workflow parses `Parent Directive: #N` body marker.
