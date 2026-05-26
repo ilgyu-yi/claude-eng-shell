@@ -21,6 +21,21 @@ Triage is the **maintainer's binary decision** per Issue. The triage-reviewer su
    ```
    Sort by `createdAt` ascending (oldest first) so older Issues are processed before newer ones.
 
+2.5. **Stale-discussion surface** (Issue #116; SPEC §5.19) — fetch open `discussion`-labeled Issues older than 14 days separately. These are not in the triage-classification queue (no `triage-reviewer` invocation; discussions don't have a template to validate against). Surface them as a maintainer-decision queue:
+   ```bash
+   gh issue list \
+     --state open \
+     --label discussion \
+     --search "created:<$(date -u -v-14d +%Y-%m-%d 2>/dev/null || date -u -d '14 days ago' +%Y-%m-%d)" \
+     --json number,title,createdAt \
+     --limit 50
+   ```
+   For each, surface: "discussion #<N>: <title> (open <X> days). Choices: promote / dismiss / let-incubate". Maintainer decides:
+   - **promote** → file a concrete Issue (`/file-issue` or `/file-directive`) referencing the discussion; then run `/resolve-discussion <N> --promoted-to <new-issue-#>`.
+   - **dismiss** → `/resolve-discussion <N> --no-action "<reason>"`.
+   - **let-incubate** → no action; will resurface in the next `/triage` run if still open.
+   In **unattended mode**: AI surfaces the queue but does NOT autonomously promote or dismiss (same filer-aware invariant as the REJECT path — discussion resolution requires maintainer judgment).
+
 3. **For each Issue, invoke `triage-reviewer`** (SPEC §4.10) with the Issue's title + body + labels + authorAssociation. Parse the verdict line:
    - `VERDICT: ACCEPT — <reason>`
    - `VERDICT: REJECT — refile as <template-name>: <reason>`

@@ -4756,6 +4756,109 @@ else
   ng "61b: SPEC §1.7 missing 'Substrate-in-target contract' subsection or ADR-0004 reference (#114)"
 fi
 
+# ---------- 62. discussion-tier lifecycle: skills + enforcement + /triage (#116) ----------
+# Issue #116 (final slice of Directive #109) ships the deferred items from
+# SPEC §5.19's "Deferred to follow-up" list: /discuss + /resolve-discussion
+# skills, close-path enforcement in the trusted-filer-mutate matcher, and
+# /triage extension to surface stale discussions.
+
+# §62a: /discuss skill file exists and has the reduced-required shape.
+if [ -f "$SHELL_ROOT/.claude/commands/discuss.md" ] \
+   && grep -q "No rationale triad, no reviewer gate" "$SHELL_ROOT/.claude/commands/discuss.md" \
+   && grep -q '"discussion"' "$SHELL_ROOT/.claude/commands/discuss.md"; then
+  ok "62a: /discuss skill declares friction-free filing + discussion label (#116)"
+else
+  ng "62a: /discuss skill missing or lacks reduced-required shape (#116)"
+fi
+
+# §62b: /resolve-discussion skill file exists with both --promoted-to and --no-action modes.
+if [ -f "$SHELL_ROOT/.claude/commands/resolve-discussion.md" ] \
+   && grep -q -- "--promoted-to" "$SHELL_ROOT/.claude/commands/resolve-discussion.md" \
+   && grep -q -- "--no-action" "$SHELL_ROOT/.claude/commands/resolve-discussion.md" \
+   && grep -q "reason completed" "$SHELL_ROOT/.claude/commands/resolve-discussion.md" \
+   && grep -q "reason not_planned" "$SHELL_ROOT/.claude/commands/resolve-discussion.md"; then
+  ok "62b: /resolve-discussion skill names both close paths + reasons (#116)"
+else
+  ng "62b: /resolve-discussion skill missing or lacks both close-path modes (#116)"
+fi
+
+# §62c-e: trusted-filer-mutate matcher hook test — close-path enforcement on discussion Issues.
+# Reuses the §55 (filer-aware) mock-gh shim pattern.
+S62_DIR=$(mktemp -d)
+mkdir -p "$S62_DIR/bin" "$S62_DIR/target"
+S62_TARGET=$(cd "$S62_DIR/target" && pwd -P)
+(cd "$S62_TARGET" && git init -q -b main 2>/dev/null || { git init -q && git checkout -q -b main; }
+ git -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit --allow-empty -q -m init) >/dev/null 2>&1
+printf '%s\n' "$S62_TARGET" >> "$SHELL_ROOT/.claude/state/registry.txt"
+
+# Mock gh: returns labels including "discussion" for issue view + --jq-aware
+# output (the hook calls `gh issue view N --json labels --jq '.labels[].name'`
+# which would yield raw label names one-per-line).
+cat > "$S62_DIR/bin/gh" <<'GHEOF'
+#!/bin/sh
+# Mock gh for §62 — discussion-tier close-path enforcement.
+case "$*" in
+  *"issue view"*"--json"*"--jq"*)
+    # The hook calls --jq '.labels[].name'; emit the label names raw.
+    printf 'discussion\n'
+    exit 0
+    ;;
+  *"issue view"*"--json"*)
+    printf '{"labels":[{"name":"discussion"}],"authorAssociation":"OWNER","state":"OPEN","number":999}\n'
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+GHEOF
+chmod +x "$S62_DIR/bin/gh"
+
+s62_close_run() {
+  local cmd="$1"
+  (
+    cd "$S62_TARGET" || exit 1
+    printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$cmd" \
+      | PATH="$S62_DIR/bin:$PATH" CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT" \
+        bash "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" >/dev/null 2>&1
+  )
+  return $?
+}
+
+# §62c: bare `gh issue close <N>` on discussion-labeled Issue → BLOCKED (rc=2).
+s62_close_run "gh issue close 999"
+case $? in
+  2) ok "62c: bare gh issue close on discussion Issue → block (#116)" ;;
+  *) ng "62c: expected rc=2 (block) for bare close on discussion, got rc=$? (#116)" ;;
+esac
+
+# §62d: `gh issue close <N> --reason completed` on discussion-labeled Issue → ALLOWED (rc=0).
+s62_close_run "gh issue close 999 --reason completed"
+case $? in
+  0) ok "62d: gh issue close --reason completed on discussion Issue → allow (#116)" ;;
+  *) ng "62d: expected rc=0 (allow) for --reason completed, got rc=$? (#116)" ;;
+esac
+
+# §62e: `gh issue close <N> --reason not_planned` on discussion-labeled Issue → ALLOWED (rc=0).
+s62_close_run "gh issue close 999 --reason not_planned"
+case $? in
+  0) ok "62e: gh issue close --reason not_planned on discussion Issue → allow (#116)" ;;
+  *) ng "62e: expected rc=0 (allow) for --reason not_planned, got rc=$? (#116)" ;;
+esac
+
+# Cleanup §62.
+sp_tmp_reg=$(mktemp); grep -vxF "$S62_TARGET" "$SHELL_ROOT/.claude/state/registry.txt" > "$sp_tmp_reg" 2>/dev/null || true
+mv "$sp_tmp_reg" "$SHELL_ROOT/.claude/state/registry.txt"
+rm -rf "$S62_DIR"
+
+# §62f: /triage names discussion stale-queue.
+if grep -q "Stale-discussion surface" "$SHELL_ROOT/.claude/commands/triage.md" \
+   && grep -q "label discussion" "$SHELL_ROOT/.claude/commands/triage.md"; then
+  ok "62f: /triage surfaces stale discussion queue (#116)"
+else
+  ng "62f: /triage missing stale-discussion surface logic (#116)"
+fi
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"

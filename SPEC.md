@@ -1092,15 +1092,15 @@ No third path. Stale discussions surface via `/triage` (§5.18); no auto-close t
 | **discussion** | `discussion` | **No** | **No** | **`promoted` or `no-action` only** |
 | needs-triage | `needs-triage` | n/a (not yet classified) | n/a | Reclassified by `/triage` |
 
-**Deferred to follow-up Execution Issues under Directive #109**:
+**Lifecycle implementation** (Issue #116; Directive #109 final slice):
 
-- `/discuss <title>` skill (or `--discussion` flag on `/file-issue`) — friction-free filing that bypasses the rationale triad + `issue-reviewer` gate.
-- `/resolve-discussion <N> [--promoted-to <M>] [--no-action <reason>]` skill — closes via one of the two documented paths.
-- Close-path enforcement (hook matcher arm under `trusted-filer-mutate`, §6.1) — blocks `gh issue close` on a `discussion`-labeled Issue without a documented reason. Convention-only until that follow-up Execution Issue ships.
-- Smoke assertions for label existence, template shape, close-path enforcement (deferred to keep the §54 cluster cohesive).
-- `/triage` integration to surface stale discussions separately from `needs-triage`.
+- `/discuss <title>` — friction-free filing; bypasses the rationale triad + `issue-reviewer` gate. Full procedure in `.claude/commands/discuss.md`.
+- `/resolve-discussion <N> [--promoted-to <M>] [--no-action <reason>]` — closes via exactly one of the two paths above. Idempotent. Full procedure in `.claude/commands/resolve-discussion.md`.
+- Close-path enforcement — hook matcher arm under `trusted-filer-mutate` (§6.1) blocks `gh issue close <N>` on a `discussion`-labeled Issue without `--reason completed` OR `--reason not_planned`. Stage 1 of the close-arm two-stage check (stage 2 = trusted-filer enforcement).
+- `/triage` extension (§5.18) — surfaces open `discussion`-labeled Issues older than 14 days as a maintainer-decision queue (promote / dismiss / let-incubate). Mode-independent: AI does not autonomously promote/dismiss even in unattended.
+- Smoke §62 — 6 assertions covering skill files, hook close-path enforcement (block + allow paths), and `/triage` extension.
 
-**Lockstep with Directive #107**: the `discussion` label must be included in `/onboard-dir-mode`'s bootstrap-label set when that script lands. This substrate Issue (#112) merges first per Directive #109 brief §6.
+**Lockstep with Directive #107**: the `discussion` label is in `/onboard-dir-mode`'s bootstrap-label set per ADR-0004 (10-label v3 set). #112 (label substrate) merged first; #116 (lifecycle) merged second; #107's `/onboard-dir-mode` consumes both.
 
 ---
 
