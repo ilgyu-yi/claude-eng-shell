@@ -38,6 +38,22 @@ else
   audit_log() { :; }
 fi
 
+# --confirm gate FIRST — destructive operation; explicit opt-in must
+# precede infrastructure checks so the gate is visible even when run on
+# a fresh runner (no registry entry, no gh auth). Subsequent guards
+# protect actual execution.
+if [ "${1:-}" != "--confirm" ]; then
+  echo "migrate_v3: DESTRUCTIVE one-shot — re-run with --confirm to proceed."
+  echo ""
+  echo "  Action: snapshot all Items in the dir-mode Project + delete each"
+  echo "  Target: \$CLAUDE_ENG_SHELL_ROOT/.claude/state/v2-snapshot/<ISO>/"
+  echo ""
+  echo "After this script: setup_project.sh reconciles the field schema to v3"
+  echo "  (drops Goal/Confidence/Success Signals; Status → 4-state set per ADR-0003)."
+  echo "  Mirror workflow re-creates Items from Issues on the next Issue event."
+  exit 2
+fi
+
 # shellcheck disable=SC2034  # consumed by sourced dir_mode_project_resolve.sh
 DR_SCRIPT_NAME=migrate_v3
 # shellcheck disable=SC2034  # consumed by sourced dir_mode_project_resolve.sh
@@ -54,20 +70,6 @@ dr_find_project || exit 1
 
 owner="$DR_OWNER"
 project_num="$DR_PROJECT_NUM"
-
-# --confirm gate — destructive.
-if [ "${1:-}" != "--confirm" ]; then
-  echo "migrate_v3: DESTRUCTIVE one-shot — re-run with --confirm to proceed."
-  echo ""
-  echo "  Project: #${project_num} (${owner}/$DR_REPO_NAME, name=\"$DR_PROJECT_NAME\")"
-  echo "  Action:  snapshot all Items + delete each from Project"
-  echo "  Target:  $CLAUDE_ENG_SHELL_ROOT/.claude/state/v2-snapshot/<ISO>/"
-  echo ""
-  echo "After this script: setup_project.sh reconciles the field schema to v3"
-  echo "  (drops Goal/Confidence/Success Signals; Status → 4-state set per ADR-0003)."
-  echo "  Mirror workflow re-creates Items from Issues on the next Issue event."
-  exit 2
-fi
 
 # MISSION.md presence check (brief §8 step 2).
 if [ ! -f "$CLAUDE_ENG_SHELL_ROOT/MISSION.md" ]; then
