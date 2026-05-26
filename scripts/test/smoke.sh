@@ -4261,15 +4261,20 @@ mkdir -p "$PT55_SHIM" "$PT55_STATE"
 cat > "$PT55_SHIM/gh" <<'SHIM'
 #!/bin/sh
 # Mock gh — minimal subcommand dispatch needed by issue_filer.sh + the matcher.
-case "$*" in
-  *"repo view"*"owner,name"*"owner.login + \"/\" + .name"*) printf 'mock/repo\n' ;;
-  *"repo view"*"owner"*) printf 'mock\n' ;;
-  *"repo view"*"name"*)  printf 'repo\n' ;;
-  *"issue view"*"--json authorAssociation"*)
-    n=$(printf '%s\n' "$*" | sed -nE 's/.*issue view ([0-9]+).*/\1/p')
+# Note: shebang is /bin/sh; on ubuntu CI this is dash, which has stricter
+# pattern parsing than bash. Patterns kept simple — `--json owner` and
+# `--json name` are sufficient discriminators (gh's separate-call form
+# from issue_filer.sh).
+args="$*"
+case "$args" in
+  *"--json owner"*) printf 'mock\n'; exit 0 ;;
+  *"--json name"*)  printf 'repo\n'; exit 0 ;;
+  *"--json authorAssociation"*)
+    n=$(printf '%s\n' "$args" | sed -nE 's/.*issue view ([0-9]+).*/\1/p')
     if [ -n "$n" ] && [ -f "$GH_SHIM_STATE/filer_$n" ]; then
       cat "$GH_SHIM_STATE/filer_$n"
-    fi ;;
+    fi
+    exit 0 ;;
 esac
 exit 0
 SHIM
@@ -4285,6 +4290,7 @@ pt55_run() {
   local cmd="$1"
   (
     cd "$TMP/fake" || exit 1
+    # shellcheck disable=SC2069  # intentional: swap stderr → captured pipe, discard stdout
     printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
       "$(printf '%s' "$cmd" | jq -Rs .)" \
       | PATH="$PT55_SHIM:$PATH" \
@@ -4339,6 +4345,7 @@ esac
 # trusted-filer close.
 (
   cd "$TMP/fake" || exit 1
+  # shellcheck disable=SC2069  # intentional: swap stderr → captured pipe, discard stdout
   printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
     "$(printf '%s' 'SKIP_HOOKS=trusted-filer-mutate SKIP_REASON=test gh issue close 100' | jq -Rs .)" \
     | PATH="$PT55_SHIM:$PATH" \
