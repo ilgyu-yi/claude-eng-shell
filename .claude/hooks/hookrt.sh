@@ -60,11 +60,12 @@ _audit_validate_format() {
   local category="$1" decision="$2" reason="$3"
   case "$category" in
     directive-file)
-      # SPEC §5.10 step 7: `directive: <Objective summary> item=<item-id>
-      # priority=P<N> confidence=<C>`. The `item=<id>` token is mandatory
-      # (issue #71). Smoke §50a scans for this same shape post-hoc.
+      # SPEC §5.10 step 4 (v3 / ADR-0003 / Directive #92 cluster I):
+      # `directive: <Objective summary> issue=#<N> priority=P<N> confidence=<C>`.
+      # The `issue=#<N>` token replaces the v0/v1 `item=<PVTI-id>` token —
+      # Issues are SSOT now. Smoke §50a scans for this same shape post-hoc.
       if [ "$decision" = "created" ]; then
-        if ! printf '%s' "$reason" | grep -qE '^directive: .+ item=[^ ]+ priority=P[0-3] confidence=[0-9]+$'; then
+        if ! printf '%s' "$reason" | grep -qE '^directive: .+ issue=#[0-9]+ priority=P[0-3] confidence=[0-9]+$'; then
           return 1
         fi
       fi
