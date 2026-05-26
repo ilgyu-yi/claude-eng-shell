@@ -1,0 +1,67 @@
+---
+description: Install the v3 substrate (labels + Issue templates + workflows + Project v2) into a target repo. Tier-aware. Idempotent. PR-based file installs per ADR-0004.
+argument-hint: [--tier 1|2|3] [--dry-run]
+---
+
+Install the dir-mode v3 substrate into the current target repo (cwd). Per ADR-0004:
+
+- **Tier 1**: no install — eng-mode works without v3 substrate.
+- **Tier 2**: install the 10-label v3 set via `gh label create --force`. Unlocks `/file-directive` / `/activate-directive` / `/complete-directive` directly against Issues. No Project mirror.
+- **Tier 3**: tier 2 + install ISSUE_TEMPLATE files + workflow files via a PR to the target + create Project v2 via `gh project create` + populate fields via `scripts/setup_project.sh`. Unlocks `/triage` + template chooser + Project-as-derived-view.
+
+Each tier is a strict superset. Re-running is idempotent at every step.
+
+## Procedure
+
+1. **Parse `$ARGUMENTS`** — `--tier <1|2|3>` (default 3) + optional `--dry-run` (no mutations; print would-do). Other values → error.
+
+2. **Verify target context** — must be in a registered target repo (per `scripts/register.sh`). If cwd not in registry: error. If not a git repo: error.
+
+3. **Resolve target's owner/repo** via `gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"'`.
+
+4. **Tier 1**: print confirmation that no install is needed; exit.
+
+5. **Tier 2** (label install):
+   - Invoke `bash $CLAUDE_ENG_SHELL_ROOT/scripts/onboard_target.sh --tier 2` (idempotent — uses `gh label create --force`).
+   - Verify via `gh label list` that all 10 labels exist: `directive`, `status:proposed`, `status:blocked`, `task`, `needs-triage`, `discussion`, `P0`, `P1`, `P2`, `P3`.
+
+6. **Tier 3** (full v3):
+   - Run step 5 (tier 2 prerequisite).
+   - Invoke `bash $CLAUDE_ENG_SHELL_ROOT/scripts/onboard_target.sh --tier 3`:
+     - Copies canonical files from `$CLAUDE_ENG_SHELL_ROOT/.claude/templates/target-substrate/` into target's `.github/`:
+       - `ISSUE_TEMPLATE/{config,directive-proposal,execution-under-directive,task,bug-report,discussion}.yml`
+       - `workflows/{auto-needs-triage,issues-to-project-mirror,dir-mode-post-merge}.yml`
+     - Creates branch `onboard-dir-mode-substrate`, commits the files, pushes, opens a PR via `gh pr create --title "chore: onboard claude-eng-shell dir-mode v3 substrate"` — **target maintainer reviews + merges**.
+     - Direct push to target's `main` is forbidden (protected-branch hook fires; this is by design per ADR-0004 Decision 2).
+   - Project v2 setup: invoke `bash $CLAUDE_ENG_SHELL_ROOT/scripts/setup_project.sh` (idempotent — creates the Project if absent, reconciles fields if present).
+
+7. **Audit log** — `audit_log info onboard-dir-mode created "target=<owner>/<repo> tier=<N>"`.
+
+8. **Output**:
+   ```
+   Onboarded <owner>/<repo> to tier <N>.
+   Tier-2 (labels): <K> labels installed.
+   Tier-3 (PR): <pr-url> opened — maintainer to review + merge.
+   Tier-3 (Project): <project-url>.
+   ```
+
+## Idempotency contract
+
+- Re-running with the same tier produces no new artifacts: labels via `--force` overwrite-without-error; ISSUE_TEMPLATE / workflow files re-committed are no-op if `git diff` is empty (the install script `git diff --quiet` checks before committing).
+- Downgrades are out-of-scope (the maintainer reverts manually per ADR-0004 reversibility paths).
+
+## Operating mode
+
+- **attended**: each tier step prints the action and waits for confirmation.
+- **unattended**: auto-applies all steps; logs every install as an audit line.
+
+## Escape
+
+`SKIP_HOOKS=onboard-dir-mode SKIP_REASON='<why>' /onboard-dir-mode <args>` bypasses the install entirely (use for sandbox/test contexts where the substrate would interfere).
+
+## Forbidden
+
+- Direct push to target's `main` branch (protected-branch hook enforces this).
+- Installing files outside the target's `.github/` (the canonical-substrate allow-list is the typed boundary per ADR-0004 Decision 1).
+- Auto-deleting target files (uninstall is the maintainer's call; ADR-0004 reversibility paths name the manual commands).
+- Skipping the audit log (the trail is the foundation for `/audit` queries).

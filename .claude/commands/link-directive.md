@@ -7,6 +7,8 @@ Link an Execution Issue to its parent Directive by ensuring the `Parent Directiv
 
 ## Procedure
 
+0. **Step 0 — substrate preflight** (ADR-0004; #118): verify the target satisfies this command's tier requirement. Tier 2 minimum for all dir-mode commands (10-label v3 set must exist). If `gh label list | grep -qx directive` fails, exit with `"target lacks dir-mode substrate; run /onboard-dir-mode --tier 2 first"`. Fail-open on `gh` network errors per ADR-0004 reversibility framing.
+
 1. **Validate the two arguments**:
    - `<directive-#>` — must be a `directive`-labeled, OPEN Issue. Fetch via `gh issue view`. If not a Directive: stop.
    - `<execution-#>` — must be an Issue WITHOUT the `directive` label (i.e., an Execution Issue or Task / Bug). If it is itself a Directive: stop with error ("Cannot parent a Directive under another Directive in v0 — see SPEC §0.4 directive-graph deferral").

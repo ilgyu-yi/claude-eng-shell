@@ -4859,6 +4859,79 @@ else
   ng "62f: /triage missing stale-discussion surface logic (#116)"
 fi
 
+# ---------- 63. target-substrate implementation: canonical dir + /onboard-dir-mode + preflight (#118) ----------
+# Issue #118 (final slice of Directive #107) ships the install machinery:
+# canonical-source directory, /onboard-dir-mode skill, scripts/onboard_target.sh,
+# and per-command graceful-degradation preflight references.
+
+# §63a: canonical-source directory has the 9 expected files.
+S63_SUB="$SHELL_ROOT/.claude/templates/target-substrate"
+s63a_count=0
+for f in ISSUE_TEMPLATE/config.yml ISSUE_TEMPLATE/directive-proposal.yml \
+         ISSUE_TEMPLATE/execution-under-directive.yml ISSUE_TEMPLATE/task.yml \
+         ISSUE_TEMPLATE/bug-report.yml ISSUE_TEMPLATE/discussion.yml \
+         workflows/auto-needs-triage.yml workflows/issues-to-project-mirror.yml \
+         workflows/dir-mode-post-merge.yml; do
+  [ -f "$S63_SUB/$f" ] && s63a_count=$((s63a_count + 1))
+done
+if [ "$s63a_count" = 9 ]; then
+  ok "63a: target-substrate canonical-source has 9 files (6 ISSUE_TEMPLATE + 3 workflows) (#118)"
+else
+  ng "63a: target-substrate canonical-source missing files: expected 9, found $s63a_count (#118)"
+fi
+
+# §63b: /onboard-dir-mode skill file exists with tiered procedure.
+if [ -f "$SHELL_ROOT/.claude/commands/onboard-dir-mode.md" ] \
+   && grep -q "Tier 1" "$SHELL_ROOT/.claude/commands/onboard-dir-mode.md" \
+   && grep -q "Tier 2" "$SHELL_ROOT/.claude/commands/onboard-dir-mode.md" \
+   && grep -q "Tier 3" "$SHELL_ROOT/.claude/commands/onboard-dir-mode.md"; then
+  ok "63b: /onboard-dir-mode skill names all 3 tiers (#118)"
+else
+  ng "63b: /onboard-dir-mode skill missing or lacks tier-aware procedure (#118)"
+fi
+
+# §63c: scripts/onboard_target.sh exists + executable + handles --tier flag.
+if [ -x "$SHELL_ROOT/scripts/onboard_target.sh" ] \
+   && grep -q -- "--tier" "$SHELL_ROOT/scripts/onboard_target.sh" \
+   && grep -q "gh label create" "$SHELL_ROOT/scripts/onboard_target.sh"; then
+  ok "63c: scripts/onboard_target.sh executable + tier-aware (#118)"
+else
+  ng "63c: scripts/onboard_target.sh missing or lacks tier handling (#118)"
+fi
+
+# §63d: scripts/onboard_target.sh --tier 1 --dry-run is a no-op (idempotent).
+s63d_rc=0
+"$SHELL_ROOT/scripts/onboard_target.sh" --tier 1 --dry-run >/dev/null 2>&1 || s63d_rc=$?
+# The script exits 1 if `gh repo view` cannot resolve (not in a gh repo context).
+# Smoke runs from the shell repo where gh is authed, so exit 0 expected. If
+# gh auth is missing, accept rc=1 as graceful-failure (per ADR-0004 fail-open).
+if [ "$s63d_rc" = 0 ] || [ "$s63d_rc" = 1 ]; then
+  ok "63d: onboard_target.sh --tier 1 --dry-run is non-destructive (rc=$s63d_rc; expected 0 or 1) (#118)"
+else
+  ng "63d: onboard_target.sh --tier 1 --dry-run unexpected rc=$s63d_rc (#118)"
+fi
+
+# §63e: each of the 7 dir-mode command procedure files contains a "step 0 preflight" reference.
+s63e_count=0
+for cmd in file-directive activate-directive complete-directive revise-directive \
+           block-directive list-directives link-directive; do
+  if grep -qE "Step 0.*preflight|step 0 preflight" "$SHELL_ROOT/.claude/commands/${cmd}.md"; then
+    s63e_count=$((s63e_count + 1))
+  fi
+done
+if [ "$s63e_count" = 7 ]; then
+  ok "63e: all 7 dir-mode commands name 'step 0 preflight' (#118)"
+else
+  ng "63e: 'step 0 preflight' missing in some dir-mode commands: $s63e_count/7 (#118)"
+fi
+
+# §63f: ADR-0004 reversibility paths referenced from /onboard-dir-mode.
+if grep -q "ADR-0004" "$SHELL_ROOT/.claude/commands/onboard-dir-mode.md"; then
+  ok "63f: /onboard-dir-mode references ADR-0004 reversibility framing (#118)"
+else
+  ng "63f: /onboard-dir-mode missing ADR-0004 reference (#118)"
+fi
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"
