@@ -222,8 +222,10 @@ EOF
 } > "$NEW_SECTION_FILE"
 
 # Prepend NEW_SECTION_FILE content before the first `## [` heading in CHANGELOG.md.
-# If no `## [` heading exists yet, insert before the first occurrence of any `## ` heading;
-# if none of those either, append at end-of-file.
+# Fallback: if no `## [` heading exists yet (pristine CHANGELOG with just the file
+# header), append at end-of-file. The inaugural section landed by #129 / PR #130
+# means `## [0.1.0]` always exists in practice; the EOF fallback is for the very
+# first release ever cut in an adopting repo whose CHANGELOG only has the header.
 CHANGELOG_NEW=$(mktemp)
 awk -v new_section_file="$NEW_SECTION_FILE" '
   BEGIN { inserted = 0 }
