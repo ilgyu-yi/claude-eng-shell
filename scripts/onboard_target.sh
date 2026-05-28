@@ -158,7 +158,7 @@ Reversibility: git rm .github/ISSUE_TEMPLATE/<file>
 or .github/workflows/<file> removes any installed file via a normal PR."
     git -C "$(pwd)" push -u origin "$BRANCH"
     gh pr create --title "chore: onboard claude-eng-shell dir-mode v3 substrate" \
-      --body "Installs ISSUE_TEMPLATE files + dir-mode workflows (SPEC §1.7 Substrate-in-target contract). Reversibility paths documented in the ADR."
+      --body "Installs ISSUE_TEMPLATE files + dir-mode workflows (SPEC §1.7 Substrate-in-target contract). Reversibility: git rm any installed file via a normal PR; gh label delete any installed label; gh project delete the Project out-of-band."
   fi
 fi
 
