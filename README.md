@@ -101,8 +101,12 @@ $ git checkout -b feature/directive-<N> && git push -u origin feature/directive-
 > /ship
 
 # When all Execution Issues are done, consolidate to main:
-$ gh pr create --base main --head feature/directive-<N> \
-    --title "..." --body "Closes #<exec-1>"$'\n'"Closes #<exec-2>..."
+$ gh pr create --base main --head feature/directive-<N> --title "..." --body "$(cat <<'EOF'
+Closes #<exec-1>
+Closes #<exec-2>
+...
+EOF
+)"
 
 # Then close the Directive:
 > /complete-directive <N>
@@ -154,12 +158,10 @@ Ten in total: `explorer`, `planner`, `doc-writer`, `test-writer`, `code-reviewer
 The full command surface is documented in SPEC §5; the most-used ones beyond `/file-issue` / `/work-on` / `/ship` / dir-mode:
 
 - `/discuss <observation>` — friction-free filing for "weird but not a bug" observations (SPEC §5.19). Bypasses the rationale-triad gate; close as promoted (concrete Issue filed) or no-action.
-- `/audit [--last <N>] [--category <cat>]` — query the audit log for recent blocks, escapes, warns. Use when debugging a hook that fired unexpectedly.
+- `/audit [<filter>]` — query the audit log for recent blocks, escapes, warns. Filter is a substring match against the log (e.g., `/audit force-push`, `/audit escape`). Use when debugging a hook that fired unexpectedly.
 - `/status` — one-shot summary of current branch / issue / PR / phase state.
 - `/release <X.Y.Z>` — cut a versioned release (consolidates per-PR changelog fragments; SPEC §18).
-- `/onboard-dir-mode` — install the v3 dir-mode substrate (labels, Issue templates, workflows, Project v2) into a target repo. Tier-aware, idempotent.
-- `/loop <interval> <command>` and `/schedule` — automation modes for recurring tasks (overnight watchers, scheduled remote agents).
-- `/verify` — run the app to confirm a change works in real behavior (not just tests). Use before reporting a UI / behavior change as done.
+- `/onboard-dir-mode [--tier 1|2|3] [--dry-run]` — install the v3 dir-mode substrate (labels, Issue templates, workflows, Project v2) into a target repo. Tier-aware, idempotent.
 
 If a hook blocked you, start with [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) and [docs/ESCAPE_HATCH.md](docs/ESCAPE_HATCH.md).
 
