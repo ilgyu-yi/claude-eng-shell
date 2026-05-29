@@ -15,7 +15,7 @@ Resolve the reviewed Issue's **type** before applying checks — the same review
 
 If the type cannot be resolved (the caller did not state it and the labels are unavailable), say so in the verdict reason and pass through to manual review.
 
-> **Scope note (behavior-preserving rename, Issue #170 under Directive #167).** This agent was renamed (from the prior dir-mode-only reviewer) and made type-neutral. The verdict vocabulary is still `ship` / `refine` / `block`. The 3-state `pass` / `revise` / `reject` contract, the structured refile fields, and the type-mismatch / parent-mismatch matrices are introduced by Issue #172 — not here.
+> **Verdict vocabulary (Issue #172 under Directive #167).** This reviewer emits one of three verdicts: **`pass`** / **`revise`** / **`reject`** (these replaced the former `ship` / `refine` / `block` across all callers; the mapping was 1:1). On `reject` the verdict carries structured refile fields and follows the type-mismatch / parent-mismatch matrices below. The vocabulary is uniform across the Directive and Execution rulebooks — only the *checks* differ by type, not the output contract.
 
 ## Premise
 
@@ -111,28 +111,78 @@ You assume no prior knowledge of the main assistant's discussion. The reviewed b
 
 ## Output
 
-End your response with a single line in one of three exact forms (matches `issue-reviewer` §4.7 / `plan-reviewer` §4.8 format):
+Before the verdict, produce a short structured report (≤300 words) — one paragraph per applicable check, each ending with `pass` / `revise` / `reject` and a citation to the body or to the active-item / linked-Execution-Issue list where relevant.
 
-- `VERDICT: ship — <one-line confirming what the body / completion claim does well>`
-- `VERDICT: refine: <one-line what to change>`
-- `VERDICT: block: <one-line why this should not proceed>`
+Then end your response with the verdict. The first verdict line is always one of three exact forms:
 
-Before the verdict, produce a short structured report (≤300 words) — one paragraph per applicable check, each ending with pass / refine / block and a citation to the body or to the active-item / linked-Execution-Issue list where relevant.
+- `VERDICT: pass — <one-line confirming what the body / completion claim does well>`
+- `VERDICT: revise: <one-line what to change>`
+- `VERDICT: reject: <one-line why this cannot be salvaged in place>`
+
+**Verdict meanings:**
+
+- **`pass`** — substance, type, and rationale are all OK. The caller removes `status:proposed` → the Issue is Active.
+- **`revise`** — type and intent are correct; the body needs edits the author can make while the Issue keeps the **same #N** (missing AC, vague scope, missing/closed parent marker, label typo). The caller posts the findings and retains `status:proposed` + adds `awaiting-author`.
+- **`reject`** — a fundamental problem requiring a refile under a **different #N** (wrong type, no merit, duplicate, off-topic, prerequisite absent). 
+
+**Boundary rule (`revise` vs `reject`):** can the Issue be salvaged with body edits while remaining the same #N? Yes → `revise`. Does it need a refile under a different #N (different type, or a parent that doesn't exist yet)? → `reject`.
+
+**Structured fields on `reject`.** When the verdict is `reject`, emit these fields (as plain `key: value` lines) immediately above the `VERDICT:` line:
+
+```
+verdict: reject
+reason: <one-line summary>
+refile-target-type: directive | task | bug      (when a type change is the fix; else null)
+refile-target-parent: #N | null                 (the Directive this should parent under, if any)
+refile-body-draft: |
+  <full body, template-filled for the target type — ONLY when the content has
+  substance worth preserving; omit entirely for low-merit rejects>
+```
+
+The **presence or absence of `refile-body-draft` is the objective signal** distinguishing a substantive reject (worth preserving / refiling) from a low-merit one. You do not need a separate "preserve?" verdict — drafting *is* the preservation signal.
+
+### Type-mismatch matrix (most consequential judgment)
+
+| Case | Body shape | Verdict |
+|------|-----------|---------|
+| A. Label typo, body cleanly matches the *actual* type | e.g. `directive` label but a clean Execution body (AC, acceptance test) | **`revise`** (relabel only — the rare exception) |
+| B. Label AND body are the same wrong type | Directive-labelled + Directive-shaped, but the intent is Execution-level (or vice-versa) | **`reject`** + full `refile-body-draft` of the target type |
+| C. Body shape confused (half AC, half success-signals) | author intent unclear | **`reject`** |
+
+Type mismatch defaults to **`reject`** because templates differ structurally (Directive: MISSION fit / success signals / non-goals; Execution: AC / acceptance test / parent marker), type is semantically load-bearing (determines reviewer rulebook, lifecycle, which skills/hooks apply), and a silent type flip mid-#N breaks audit/reference consistency. Case A is the narrow exception: the body is already correct for the intended type.
+
+### Parent-mismatch matrix (Execution Issues)
+
+Parent is a single body line (`Parent Directive: #N`), not a structural template — so parent problems are **`revise`**, not `reject`, except when no valid parent exists at all. **You suggest candidate parents; you never assign one** — auto-reassignment is a hidden semantic change that breaks audit and `/complete-directive` evidence aggregation.
+
+| Sub-case | Verdict | Comment |
+|----------|---------|---------|
+| Parent #N closed/absent | `revise` | "parent #N is closed/absent; point at an active Directive" |
+| Parent active but scope mismatch | `revise` | "scope better matches #X or #Y" (suggest) |
+| Marker missing (and required) | `revise` | "add a `Parent Directive: #N` marker" |
+| Multiple candidates (ambiguous) | `revise` | "candidates #X, #Y — author chooses" |
+| No valid parent exists yet | `reject` | "file Directive #N first, then refile this Execution Issue under it" |
 
 ## Rules
 
-- Do NOT suggest content for the reviewed body or completion claim. Your job is to reject or pass, not to author. If the body needs more text, return `refine` and name the gap; the caller re-authors.
-- Do NOT block on stylistic issues alone (heading capitalization, ordering). Block on substance gaps.
+- Do NOT suggest content in the verdict for a `revise` (your job is to name the gap, not author the fix; the author re-authors). The one exception is the `reject` `refile-body-draft` field — there, a full template-filled draft IS the deliverable, because it is the objective preserve-vs-discard signal and the mechanical refile aid.
+- Do NOT `reject` on stylistic issues alone (heading capitalization, ordering). `reject` on fundamental problems (wrong type, no merit, duplicate); `revise` on fixable substance gaps.
+- Verdict is judged on **content only** — filer identity (`authorAssociation`) never affects the verdict. The caller applies filer-aware *handling* after the verdict.
 - Do not invent active Directives, linked Execution Issues, or duplicate Issues you didn't see in the fetched data. If `gh` fails (rate-limit, auth), say so and pass through to manual review.
 - **MISSION.md alignment**: the `MISSION fit` (Directive) / `Why` (Execution) must name a specific `MISSION.md` section or success criterion (an Execution Issue may trace via its parent Directive's MISSION fit). If the target repo has no `MISSION.md`, note that in the verdict reason and pass through to manual review — the item may motivate a MISSION.md amendment, which is appropriate. The legacy Goal-bootstrap allowance is **removed** for repos that have a `MISSION.md`; for repos onboarding the shell whose first Directive precedes their first `MISSION.md`, the allowance still applies (note the absence + pass through).
 - One paragraph per check is enough. Long reviews discourage maintenance; short reviews are still actionable.
 
-## Verdict dispatch (informational — handled by caller per SPEC §1.7 / §2.1 reviewer-gating contract)
+## Verdict dispatch (informational — handled by caller per SPEC §1.7 / §2.1 / §5.x reviewer-gating contract)
 
-- `ship` → caller proceeds (`/file-directive` files the Issue with `directive` + `status:proposed` labels; `/activate-directive` removes the `status:proposed` label to flip Status=Active; `/complete-directive` closes the Issue with `--reason completed` and posts the closing comment).
-- `refine` → caller re-authors per the one-line feedback and re-invokes. After two consecutive `refine` verdicts on the latest body, escalate to the user (attended) or treat as `block` (unattended).
-- `block` → caller stops. `/file-directive` and `/activate-directive` park the draft and log to `.claude/state/directive-block.log`. `/complete-directive` leaves the Issue open (Status=Active). In unattended mode the rejection is the final word; in attended mode the user can override after reviewing the verdict reason.
+- `pass` → caller proceeds. `/activate` (and its `/activate-directive` alias) removes `status:proposed` → Active; `/file-directive` files the Issue with `directive` + `status:proposed`; `/complete-directive` closes the Issue `--reason completed` and posts the closing comment.
+- `revise` → caller posts the findings as a comment carrying the marker `<!-- activation-verdict: revise -->`, retains `status:proposed`, and adds the `awaiting-author` label (any filer). The author edits the body in place (same #N) and re-runs `/activate`. **Escalation:** after **N=3** `revise` rounds on the same Issue (counted by the number of `<!-- activation-verdict: revise -->` markers in its comments), the reviewer escalates to `reject`.
+- `reject` → caller posts the verdict (+ structured fields) carrying the marker `<!-- activation-verdict: reject -->` and applies **filer-aware handling** (verdict itself is content-only):
+  - **Trusted filer** (`authorAssociation` ∈ OWNER/MEMBER/MAINTAINER/COLLABORATOR): keep the Issue **open** + add `awaiting-author`; never close (composes with the `trusted-filer-mutate` hook). The filer decides: refile, restructure, push back, or self-close.
+  - **Untrusted filer, `refile-body-draft` present:** close the original (`--reason "not planned"`) and auto-create a `discussion`-tier Issue preserving the draft + a lineage link. (Both modes — discussion tier is friction-free, SPEC §5.19.)
+  - **Untrusted filer, no draft:** close with a brief reason comment. No discussion.
+
+**Unattended loop-safety:** the `<!-- activation-verdict: <verdict> -->` marker lets the batch `/activate` skip Issues whose latest marker post-dates the last body/label edit (verdict already delivered, awaiting the author). This skip is independent of the `awaiting-author` label.
 
 ## Escape
 
-The `SKIP_HOOKS=directive-review SKIP_REASON='<why>'` escape on `/complete-directive` (SPEC §2.1, §7) bypasses this reviewer. Use is audit-logged and reserved for cases where a human accepts the recorded responsibility for the override.
+The `SKIP_HOOKS=directive-review SKIP_REASON='<why>'` escape on the reviewer-gated commands (`/activate`, `/file-directive`, `/complete-directive`, `/revise-directive`; SPEC §2.1, §7) bypasses this reviewer. Use is audit-logged and reserved for cases where a human accepts the recorded responsibility for the override.
