@@ -1,5 +1,7 @@
 # claude-eng-shell
 
+**English** | [한국어](README.ko.md)
+
 **An opinionated workflow shell for [Claude Code](https://docs.claude.com/claude-code).** It wraps a Claude Code session in the engineering discipline a senior human would apply on a GitHub repository — issue → branch → draft PR → reviewed commits → ready merge — and renders that discipline as hooks, slash commands, subagents, and an audit trail. The point is to let an AI drive end-to-end engineering work without drifting past the checks a careful human would not skip.
 
 - **[MISSION.md](MISSION.md)** — what success looks like twelve months out, who this is for, and what is explicitly not a goal.
