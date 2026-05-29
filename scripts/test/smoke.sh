@@ -5520,6 +5520,97 @@ else
   ng "68: CLAUDE.md ceiling not reconciled with SPEC §5.7.1 / unqualified phrasing remains (#201)"
 fi
 
+# ---------- 69. label-parent-consistency matcher (#199, enforces #197 advisory) ----------
+# Runtime PreToolUse matcher: `gh issue edit <N> --add-label {execution|task|bug}`
+# must be consistent with the Issue body's line-1 `Parent Directive: #N` marker.
+# `execution` requires a marker; `task`/`bug` must NOT carry one. Behavioral
+# (block/allow rc) asserts, not prose-presence — answering the #197 self-review
+# gap (smoke §67 greps the instruction exists, not that it is obeyed). Reuses the
+# §62 mock-gh shim pattern; the matcher resolves the body via
+# `gh issue view <N> --json body -q .body` (issue_has_parent_marker, tri-state).
+# NOTE (#199): renumbered §68→§69 on rebase after PR #202 landed its own §68
+# (the ceiling test above) on main — the planned keep-both resolution.
+S69_DIR=$(mktemp -d)
+mkdir -p "$S69_DIR/bin" "$S69_DIR/target"
+S69_TARGET=$(cd "$S69_DIR/target" && pwd -P)
+(cd "$S69_TARGET" && git init -q -b main 2>/dev/null || { git init -q && git checkout -q -b main; }
+ git -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit --allow-empty -q -m init) >/dev/null 2>&1
+printf '%s\n' "$S69_TARGET" >> "$SHELL_ROOT/.claude/state/registry.txt"
+
+# Mock gh: issue 777 is parented (line-1 marker), 888 is standalone (no marker),
+# 555 simulates gh failure (fail-open path). The matcher calls
+# `gh issue view <N> --json body -q .body`; the mock emits the post-jq body raw.
+cat > "$S69_DIR/bin/gh" <<'GHEOF'
+#!/bin/sh
+case "$*" in
+  *"issue view 777"*) printf 'Parent Directive: #92\n\n## What\nparented execution work\n'; exit 0 ;;
+  *"issue view 888"*) printf '## What\nstandalone task body, no marker\n'; exit 0 ;;
+  *"issue view 555"*) exit 1 ;;   # gh down / no auth → predicate rc 2 → fail open
+  *) exit 0 ;;
+esac
+GHEOF
+chmod +x "$S69_DIR/bin/gh"
+
+s69_edit_run() {
+  # $1 = full command (may carry a SKIP_HOOKS env-prefix for the escape case).
+  (
+    cd "$S69_TARGET" || exit 1
+    printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$1" \
+      | PATH="$S69_DIR/bin:$PATH" CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT" \
+        bash "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" >/dev/null 2>&1
+  )
+  return $?
+}
+
+# §69a: --add-label execution on a marker-less Issue (888) → BLOCKED (rc=2).
+s69_edit_run "gh issue edit 888 --add-label execution"
+case $? in
+  2) ok "69a: --add-label execution on marker-less Issue → block (#199)" ;;
+  *) ng "69a: expected rc=2 (block) for execution w/o marker, got rc=$? (#199)" ;;
+esac
+
+# §69b: --add-label execution on a parented Issue (777, has marker) → ALLOWED (rc=0).
+s69_edit_run "gh issue edit 777 --add-label execution"
+case $? in
+  0) ok "69b: --add-label execution with marker present → allow (#199)" ;;
+  *) ng "69b: expected rc=0 (allow) for execution w/ marker, got rc=$? (#199)" ;;
+esac
+
+# §69c: --add-label task on a parented Issue (777, has marker) → BLOCKED (rc=2).
+s69_edit_run "gh issue edit 777 --add-label task"
+case $? in
+  2) ok "69c: --add-label task with marker present → block (type smell) (#199)" ;;
+  *) ng "69c: expected rc=2 (block) for task w/ marker, got rc=$? (#199)" ;;
+esac
+
+# §69d: fail-open — gh unresolvable (555) → ALLOWED (rc=0) even for the would-block
+# execution-no-marker shape. Parity with proposed-protect / trusted-filer-mutate.
+s69_edit_run "gh issue edit 555 --add-label execution"
+case $? in
+  0) ok "69d: fail-open when Issue body unresolvable → allow (#199)" ;;
+  *) ng "69d: expected rc=0 (fail-open) for unresolvable body, got rc=$? (#199)" ;;
+esac
+
+# §69e: escape hatch — SKIP_HOOKS=label-parent-consistency bypasses the §69a block
+# (rc=0) AND emits an escape audit record (category label-parent-consistency).
+s69_before=$(wc -l < "$REAL_AUDIT" 2>/dev/null | tr -d ' '); [ -z "$s69_before" ] && s69_before=0
+s69_edit_run "SKIP_HOOKS=label-parent-consistency SKIP_REASON=legit-two-step gh issue edit 888 --add-label execution"
+s69_rc=$?
+s69_after=$(wc -l < "$REAL_AUDIT" 2>/dev/null | tr -d ' '); [ -z "$s69_after" ] && s69_after=0
+s69_delta=$((s69_after - s69_before))
+if [ "$s69_rc" = 0 ] && [ "$s69_delta" -ge 1 ] \
+   && tail -n "$s69_delta" "$REAL_AUDIT" 2>/dev/null | grep -q '"category":"label-parent-consistency"' \
+   && tail -n "$s69_delta" "$REAL_AUDIT" 2>/dev/null | grep -q '"event":"escape"'; then
+  ok "69e: SKIP_HOOKS=label-parent-consistency bypasses + audit-logs escape (#199)"
+else
+  ng "69e: escape not honored / not audited (rc=$s69_rc, delta=$s69_delta) (#199)"
+fi
+
+# Cleanup §69.
+s69_tmp_reg=$(mktemp); grep -vxF "$S69_TARGET" "$SHELL_ROOT/.claude/state/registry.txt" > "$s69_tmp_reg" 2>/dev/null || true
+mv "$s69_tmp_reg" "$SHELL_ROOT/.claude/state/registry.txt"
+rm -rf "$S69_DIR"
+
 # ---------- 70. force-push scoping: explicit non-protected target only (#204) ----------
 # Allow force-push to an explicitly-named non-protected branch (the rebase-pull
 # tail, SPEC §13); block a protected target, and block a bare/remote-only
@@ -5527,9 +5618,8 @@ fi
 # from the COMMAND (protected token + explicit-refspec presence), never from the
 # current branch — a bare push's true destination is config-dependent, so HEAD
 # is not a safe proxy (a feature branch tracking origin/main would clobber main).
-# NOTE (#204): §69 is reserved by the parallel PR #203 (label-parent-consistency,
-# branched off the same main); numbered §70 to avoid a post-merge collision at
-# this anchor — whichever PR merges second keeps both sections.
+# NOTE (#204): §69 (label-parent-consistency, #203) is the section immediately
+# above; §70 follows it — the planned keep-both resolution at this anchor.
 
 # §70a: explicit non-protected refspec → ALLOW.
 if [ "$(hook_run 'git push --force-with-lease origin my-feature')" = "0" ]; then
