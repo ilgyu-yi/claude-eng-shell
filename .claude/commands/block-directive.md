@@ -11,7 +11,7 @@ Not reviewer-gated by `activation-reviewer` — blocking is an annotation, not a
 
 ## Procedure
 
-0. **Substrate preflight**: abort with `"target lacks dir-mode substrate; run /onboard-dir-mode --tier 2 first"` if `gh label list | grep -qx directive` fails. Fail-open on `gh` network errors.
+0. **Substrate preflight**: abort with `"target lacks dir-mode substrate; run /onboard-dir-mode --tier 2 first"` if `gh label list | cut -f1 | grep -qx directive` fails. Fail-open on `gh` network errors.
 
 1. **Parse arguments** — `<issue-#>` is the GitHub Issue number; `--reason <why>` is **mandatory**. If `--reason` is missing or its value is empty after whitespace-trim: error ("--reason <why> is required for /block-directive") and stop.
 

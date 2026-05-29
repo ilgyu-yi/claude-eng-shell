@@ -9,7 +9,7 @@ Issue close-as-completed IS the Status=Completed signal. The Project Item's Stat
 
 ## Procedure
 
-0. **Substrate preflight**: abort with `"target lacks dir-mode substrate; run /onboard-dir-mode --tier 2 first"` if `gh label list | grep -qx directive` fails. Fail-open on `gh` network errors.
+0. **Substrate preflight**: abort with `"target lacks dir-mode substrate; run /onboard-dir-mode --tier 2 first"` if `gh label list | cut -f1 | grep -qx directive` fails. Fail-open on `gh` network errors.
 
 1. **Resolve the Issue** — `<issue-#>` is a GitHub Issue number. Fetch:
    ```bash
