@@ -27,16 +27,23 @@ Create a new Directive as a GitHub Issue. Body authored from `.claude/templates/
    - **`revise: <feedback>`** → revise the body per the one-line feedback. Re-invoke `activation-reviewer` on the revised body. After two consecutive `revise` verdicts, escalate to the user (attended) or treat as `reject` (unattended).
    - **`reject: <reason>`** → do NOT create the Issue. In attended mode: report the reason and stop. In unattended mode: append one line to `$CLAUDE_ENG_SHELL_ROOT/.claude/state/directive-block.log` and stop.
 
-3. **Create the Issue**:
+3. **Create the Issue**. The `P<P>` priority label is applied **only if it exists** on the target (graceful degradation, SPEC §0.4) — the `directive` label is the hard dependency (enforced by step 0), the `P<N>` label is degradable:
    ```bash
+   # P-label is degradable: apply if present, else warn + continue (never abort).
+   PLABEL=()
+   if gh label list --limit 200 | cut -f1 | grep -qx "P<P>"; then
+     PLABEL=(--label "P<P>")
+   else
+     printf 'warn: priority label P<P> absent on target — filing without it (run scripts/ensure_v3_labels.sh to install P0-P3).\n' >&2
+   fi
    gh issue create \
      --title "directive: <Objective summary, ≤80 chars>" \
      --body "<full body from step 1>" \
      --label "directive" \
      --label "status:proposed" \
-     --label "P<P>"
+     "${PLABEL[@]}"
    ```
-   Capture the new Issue number `<N>`. The `P<P>` label (one of `P0`/`P1`/`P2`/`P3`) is the priority captured in step 1; the mirror workflow reads this label to populate the Project Item's Priority field.
+   Capture the new Issue number `<N>`. The `P<P>` label (one of `P0`/`P1`/`P2`/`P3`) is the priority captured in step 1; the mirror workflow reads this label to populate the Project Item's Priority field. `P0`–`P3` are part of the tier-2 dir-mode label set installed by `scripts/ensure_v3_labels.sh` (SPEC §0.4); the graceful-degradation guard above keeps `/file-directive` working even on a target where they were not installed. **Priority is also recorded in the body `## Priority` field and the step-4 audit line — the label is the mirror-readable projection, not the sole record.**
 
 4. **Audit log** — `audit_log info directive-file created "directive: <Objective summary> issue=#<N> priority=P<P> confidence=<C>"`.
 
