@@ -99,9 +99,9 @@ Both invariants are enforced by the `trusted-filer-mutate` hook matcher.
 Engineering-flow matchers skip Directive Issues:
 
 - AC-closeout matcher skips when ALL closing issues are Directives (Directives close via `/complete-directive`, not AC checkboxes).
-- `directive-protect` matcher blocks `git checkout -b <user>/<type>/<N>-<slug>` when `<N>` is a Directive — the engineering-flow `/work-on` is the wrong tool for a Directive.
+- `proposed-protect` matcher blocks `git checkout -b <user>/<type>/<N>-<slug>` when `<N>` is `status:proposed` (any type — run `/activate <N>` first) or a Directive (any status — the engineering-flow `/work-on` is the wrong tool for a Directive; use `/file-issue --parent <N>`).
 
-See SPEC §1.7 type-aware engineering hooks for the predicate (`is_directive_issue`) and fail-policy.
+See SPEC §1.7 type-aware engineering hooks for the predicates (`is_directive_issue`, `is_proposed_issue`) and fail-policy.
 
 ## Three-tier substrate
 
@@ -117,6 +117,6 @@ A target repo adopts the shell at one of three tiers (SPEC §1.7 substrate-in-ta
 
 - [`ENGINEERING_FLOW.md`](./ENGINEERING_FLOW.md) — the engineering tier (Execution Issue → PR → merge).
 - [`SUBAGENTS.md`](./SUBAGENTS.md) — full reviewer catalog including `activation-reviewer` and `triage-reviewer`.
-- [`ESCAPE_HATCH.md`](./ESCAPE_HATCH.md) — bypass categories including `directive-review`, `directive-protect`, `trusted-filer-mutate`.
+- [`ESCAPE_HATCH.md`](./ESCAPE_HATCH.md) — bypass categories including `directive-review`, `proposed-protect`, `trusted-filer-mutate`.
 - [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md) — symptom-to-fix rows for dir-mode blocks.
 - [SPEC §1.7, §2.1, §4.9, §5.10–§5.18](../SPEC.md) — full normative spec.

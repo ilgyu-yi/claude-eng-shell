@@ -4,16 +4,24 @@
 # Used by pre_tool_use.sh matchers (SPEC §1.7, §6.1) to distinguish Directive
 # Issues (the `directive` label) from Execution Issues (everything else).
 #
-# Function:
+# Functions:
 #   is_directive_issue <issue#>
 #     rc 0 → Type=Directive (the issue carries the `directive` label).
 #     rc 1 → Type=Execution (no `directive` label) OR unresolvable.
+#   is_proposed_issue <issue#>
+#     rc 0 → the issue carries the `status:proposed` label.
+#     rc 1 → no `status:proposed` label OR unresolvable.
 #
-# Caches the result per-session at
+# Cache asymmetry (deliberate, #171): `is_directive_issue` caches its result
+# per-session at
 #   $CLAUDE_ENG_SHELL_ROOT/.claude/state/issue-type-cache/<owner>__<repo>__<n>
-# so a hot loop of matcher invocations doesn't issue an N+1 cascade of
-# `gh issue view` calls. Cache lifetime: per-session; the cache directory is
-# gitignored. A `gh` failure caches no entry — the next invocation retries.
+# because the `directive` label is effectively immutable for a Directive's life
+# (the trusted-filer-mutate declassify guard enforces this). `is_proposed_issue`
+# does NOT cache: the `status:proposed` label is volatile — `/activate` removes
+# it — and a stale `proposed` cache entry would keep a just-activated Issue
+# blocked by `proposed-protect` until session restart. The cost is one extra
+# `gh issue view` per branch-creation attempt, a cold path, not a hot loop.
+# A `gh` failure caches no entry / returns rc 1 — the caller fails open (§6.1).
 
 is_directive_issue() {
   local issue="$1"
@@ -55,6 +63,30 @@ is_directive_issue() {
     return 0
   else
     printf 'execution\n' > "$cache_file" 2>/dev/null || true
+    return 1
+  fi
+}
+
+# is_proposed_issue <issue#> — rc 0 if the issue carries the `status:proposed`
+# label, rc 1 otherwise (or if unresolvable). UNCACHED by design (see the
+# cache-asymmetry note in the header): the label is volatile under `/activate`.
+is_proposed_issue() {
+  local issue="$1"
+  case "$issue" in
+    ''|*[!0-9]*) return 1 ;;  # not a number → cannot be a proposed issue
+  esac
+
+  # No cache read/write — query gh fresh every call. gh infers the repo from
+  # cwd; no owner/name resolution needed (that was only for the cache key).
+  local labels
+  labels=$(gh issue view "$issue" --json labels -q '[.labels[].name] | join(",")' 2>/dev/null) || return 1
+
+  # Match the `status:proposed` label exactly within the comma-joined list.
+  # The colon is a non-word char, so grep -w is unreliable here — anchor on
+  # list boundaries (start/comma … comma/end) instead.
+  if printf '%s' "$labels" | grep -qE '(^|,)status:proposed(,|$)'; then
+    return 0
+  else
     return 1
   fi
 }

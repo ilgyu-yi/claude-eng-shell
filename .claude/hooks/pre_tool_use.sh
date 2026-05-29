@@ -24,7 +24,7 @@ safe_source "$SHELL_ROOT/.claude/hooks/helpers/branch_guard.sh"         branch  
 safe_source "$SHELL_ROOT/.claude/hooks/helpers/conventional_commit.sh"  commit-format    || true
 safe_source "$SHELL_ROOT/.claude/hooks/helpers/secret_scan.sh"          secret           || true
 safe_source "$SHELL_ROOT/.claude/hooks/helpers/git_matcher.sh"          commit-format    || true
-safe_source "$SHELL_ROOT/.claude/hooks/helpers/issue_type.sh"           directive-protect || true
+safe_source "$SHELL_ROOT/.claude/hooks/helpers/issue_type.sh"           proposed-protect || true
 safe_source "$SHELL_ROOT/.claude/hooks/helpers/issue_filer.sh"          trusted-filer-mutate || true
 
 # If cwd_guard.sh wasn't loaded, `in_scope` is undefined → rc=127 → exit 0
@@ -252,38 +252,53 @@ case "$tool" in
       [ -z "$decided" ] && pass_through_trace ac-closeout "$cmd"
     fi
 
-    # directive-protect — block branch-creation referencing a Directive Issue
-    # (SPEC §1.7, §6.1). The branch-name convention <user>/<type>/<N>-<slug>
-    # (CLAUDE.md / SPEC §10.1) encodes the issue number; we extract <N> and
-    # check is_directive_issue. If yes, refuse the branch creation with a
-    # redirect to /activate-directive (if Planned) or /file-issue --parent
-    # (if Active).
+    # proposed-protect — block branch-creation referencing an Issue that is not
+    # yet a branchable Execution Issue (SPEC §1.7, §6.1, §10.5). Generalized from
+    # directive-protect (#171): block when the target Issue is EITHER
+    # status:proposed (any type — not-yet-activated; run /activate first) OR a
+    # Directive (any status — Directives never branch; use /file-issue --parent).
+    # Subsumes the old Directive-only check: a status-only check would let an
+    # Active Directive branch — a §10.5 regression. The branch-name convention
+    # <user>/<type>/<N>-<slug> (CLAUDE.md / SPEC §10.1) encodes the issue number;
+    # extract <N> and evaluate both predicates. Each predicate fails open
+    # independently (gh down / no auth / undefined function → that arm does not
+    # block) per SPEC §6.1.
     if printf '%s' "$cmd" | grep -qE "${GIT_PREFIX}checkout[[:space:]]+-b[[:space:]]+[A-Za-z0-9._-]+/[a-z]+/[0-9]+-"; then
       decided=
-      if should_skip directive-protect; then
+      if should_skip proposed-protect; then
         decided=1
-      elif command -v is_directive_issue >/dev/null 2>&1; then
+      else
         # Extract the issue number via bash builtin regex. GIT_PREFIX uses
         # PCRE-style \b/\s/\S that sed -E (BSD/macOS) doesn't support; bash
         # =~ uses POSIX ERE which is fine for this branch-name shape.
-        dp_issue=
+        pp_issue=
         if [[ "$cmd" =~ checkout[[:space:]]+-b[[:space:]]+[A-Za-z0-9._-]+/[a-z]+/([0-9]+)- ]]; then
-          dp_issue="${BASH_REMATCH[1]}"
+          pp_issue="${BASH_REMATCH[1]}"
         fi
-        if [ -n "$dp_issue" ] && is_directive_issue "$dp_issue"; then
-          block directive-protect "Issue #${dp_issue} is a Directive (Type=Directive, SPEC §1.7). Directives do not branch into engineering PRs. Use /activate-directive ${dp_issue} (if Planned) or /file-issue --parent ${dp_issue} (if Active). Or SKIP_HOOKS=directive-protect SKIP_REASON='<why>' for legitimate edge cases."
+        pp_is_proposed=
+        pp_is_directive=
+        if [ -n "$pp_issue" ]; then
+          if command -v is_proposed_issue >/dev/null 2>&1 && is_proposed_issue "$pp_issue"; then
+            pp_is_proposed=1
+          fi
+          if command -v is_directive_issue >/dev/null 2>&1 && is_directive_issue "$pp_issue"; then
+            pp_is_directive=1
+          fi
+        fi
+        if [ -n "$pp_is_proposed" ]; then
+          # status:proposed arm wins on overlap (proposed Directive) — activation
+          # is the next legitimate action regardless of type.
+          block proposed-protect "Issue #${pp_issue} is status:proposed — Issue-ops only, not yet actionable. Run /activate ${pp_issue} (once available) to validate it before branching. Or SKIP_HOOKS=proposed-protect SKIP_REASON='<why>' for legitimate edge cases."
+        elif [ -n "$pp_is_directive" ]; then
+          block proposed-protect "Issue #${pp_issue} is a Directive (Type=Directive, SPEC §1.7/§10.5). Directives do not branch into engineering PRs — the Directive scopes the work, Execution Issues do it. Use /file-issue --parent ${pp_issue}. Or SKIP_HOOKS=proposed-protect SKIP_REASON='<why>' for legitimate edge cases."
         else
-          # Either issue # is not a Directive, or is_directive_issue failed
-          # (gh down, no auth) — fail-open per SPEC §6.1.
-          mark_allow directive-protect
+          # Neither proposed nor a Directive, or predicates unresolvable
+          # (gh down, no auth, helper/function missing) — fail-open per SPEC §6.1.
+          mark_allow proposed-protect
           decided=1
         fi
-      else
-        # helper missing → safe_source already warned at file top; fail-open.
-        mark_allow directive-protect
-        decided=1
       fi
-      [ -z "$decided" ] && pass_through_trace directive-protect "$cmd"
+      [ -z "$decided" ] && pass_through_trace proposed-protect "$cmd"
     fi
 
     # trusted-filer-mutate — block close / declassify mutations against
