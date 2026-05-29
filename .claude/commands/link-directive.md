@@ -7,7 +7,7 @@ Link an Execution Issue to its parent Directive by ensuring the `Parent Directiv
 
 ## Procedure
 
-0. **Substrate preflight**: abort with `"target lacks dir-mode substrate; run /onboard-dir-mode --tier 2 first"` if `gh label list | grep -qx directive` fails. Fail-open on `gh` network errors.
+0. **Substrate preflight**: abort with `"target lacks dir-mode substrate; run /onboard-dir-mode --tier 2 first"` if `gh label list | cut -f1 | grep -qx directive` fails. Fail-open on `gh` network errors.
 
 1. **Validate the two arguments**:
    - `<directive-#>` — must be a `directive`-labeled, OPEN Issue. Fetch via `gh issue view`. If not a Directive: stop.
