@@ -103,18 +103,19 @@ if [ -n "$DRY_RUN" ]; then
   ensure_label "task"            "C5DEF5" "Standalone task or small improvement (not parented under a Directive)"
   ensure_label "discussion"      "FEF2C0" "Observation or half-formed idea; close as promoted (#M) or no-action (SPEC §5.19)"
   ensure_label "skip-changelog"  "CCCCCC" "PR exempt from fragment-gate; no end-user observable change (SPEC §18.6)"
+  ensure_label "P0"              "B60205" "Priority 0 — drop everything"
+  ensure_label "P1"              "D93F0B" "Priority 1 — next"
+  ensure_label "P2"              "FBCA04" "Priority 2 — soon"
+  ensure_label "P3"              "0E8A16" "Priority 3 — eventually"
 else
   bash "$CLAUDE_ENG_SHELL_ROOT/scripts/ensure_v3_labels.sh" 2>&1 | sed 's/^/  /'
 fi
 
-# Additional labels not in ensure_v3_labels.sh (directive + priorities).
+# Additional label not in ensure_v3_labels.sh (P0-P3 moved into the canonical
+# set by #185; only `directive` remains inline here).
 ensure_label "directive" "0E8A16" "Directive Issue (dir-mode, SPEC §1.7)"
-ensure_label "P0" "B60205" "Priority 0 — drop everything"
-ensure_label "P1" "D93F0B" "Priority 1 — next"
-ensure_label "P2" "FBCA04" "Priority 2 — soon"
-ensure_label "P3" "0E8A16" "Priority 3 — eventually"
 
-echo "onboard_target: tier 2 labels done (11 total: 6 from ensure_v3_labels.sh + 5 inline)."
+echo "onboard_target: tier 2 labels done (11 total: 10 from ensure_v3_labels.sh + 1 inline: directive)."
 
 if [ "$TIER" = 2 ]; then
   audit_log info onboard-dir-mode created "target=$TARGET_OWNER_REPO tier=2 labels=11"
