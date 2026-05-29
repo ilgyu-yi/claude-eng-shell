@@ -10,6 +10,8 @@
 #   - task             — standalone task / improvement (task.yml)
 #   - discussion       — observation / half-formed idea (SPEC §5.19; Issue #112)
 #   - skip-changelog   — PR-time opt-out for the release-backbone fragment-gate (SPEC §18.6)
+#   - P0 / P1 / P2 / P3 — Directive priority (#185; SPEC §0.4 tier-2 set; the P<N> label
+#                        /file-directive applies is the mirror-readable priority projection)
 #
 # Already-existing labels that v3 relies on (no creation needed):
 #   - directive, bug, enhancement, documentation, duplicate, wontfix,
@@ -34,5 +36,9 @@ ensure_label "awaiting-author"  "F9D0C4" "Reviewer returned a verdict (revise/tr
 ensure_label "task"            "C5DEF5" "Standalone task or small improvement (not parented under a Directive)"
 ensure_label "discussion"      "FEF2C0" "Observation or half-formed idea; close as promoted (#M) or no-action (SPEC §5.19)"
 ensure_label "skip-changelog"  "CCCCCC" "PR exempt from fragment-gate; no end-user observable change (SPEC §18.6)"
+ensure_label "P0"              "B60205" "Priority 0 — drop everything"
+ensure_label "P1"              "D93F0B" "Priority 1 — next"
+ensure_label "P2"              "FBCA04" "Priority 2 — soon"
+ensure_label "P3"              "0E8A16" "Priority 3 — eventually"
 
 echo "ensure_v3_labels: done."
