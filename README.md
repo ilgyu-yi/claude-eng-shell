@@ -3,7 +3,7 @@
 **An opinionated workflow shell for [Claude Code](https://docs.claude.com/claude-code).** It wraps a Claude Code session in the engineering discipline a senior human would apply on a GitHub repository — issue → branch → draft PR → reviewed commits → ready merge — and renders that discipline as hooks, slash commands, subagents, and an audit trail. The point is to let an AI drive end-to-end engineering work without drifting past the checks a careful human would not skip.
 
 - **[MISSION.md](MISSION.md)** — what success looks like twelve months out, who this is for, and what is explicitly not a goal.
-- **[SPEC.md](SPEC.md)** — the single self-contained specification (~1,300 lines). Start from the **Table of contents** at the top and read individual sections with `Read --offset --limit` rather than loading the whole file.
+- **[SPEC.md](SPEC.md)** — the single self-contained specification (~1,900 lines). Start from the **Table of contents** at the top and read individual sections with `Read --offset --limit` rather than loading the whole file.
 
 ## Why this shape
 
@@ -26,7 +26,7 @@ This is why the shell is structured around a hierarchy of artifacts (`MISSION.md
 Two operating layers, both following the same generate → review → gated approval → audit pattern:
 
 - **eng-mode** — engineering execution. `/file-issue` → `/work-on <N>` (creates branch + draft PR) → Doc → Test → Code commits → `/ship` (runs reviewers, ticks AC, marks ready) → merge.
-- **dir-mode** — directing maintenance. `/file-directive` → `/activate-directive` → `/file-issue --parent <N>` to spin out Execution Issues → `/complete-directive` when success signals are met. Manual mode switching in v0; the orchestrator that auto-switches is v1+ (SPEC §0.4).
+- **dir-mode** — directing maintenance. `/file-directive` → `/activate` → `/file-issue --parent <N>` to spin out Execution Issues → `/complete-directive` when success signals are met. Manual mode switching in v0; the orchestrator that auto-switches is v1+ (SPEC §0.4).
 
 In `unattended` mode the reviewer subagents substitute for the human approvals at each checkpoint; in `attended` mode (default) the agent stops at PR-ready and waits for a human review.
 
@@ -56,9 +56,10 @@ claude-eng
 
 # Inside the session:
 > /onboard
-> /file-issue <description>
-> /work-on <issue#>                          # default: branches from main
-> /work-on <issue#> --base experiment/foo    # topic-branch flow (SPEC §10.5)
+> /file-issue <description>                   # files the Issue as status:proposed
+> /activate <issue#>                          # Proposed → Active (reviewer-gated; required before /work-on)
+> /work-on <issue#>                           # default: branches from main
+> /work-on <issue#> --base experiment/foo     # topic-branch flow (SPEC §10.5)
 > /ship
 ```
 
@@ -78,11 +79,13 @@ A **Directive** is a medium-term directional context that scopes one or more Exe
 ```bash
 # Inside the session:
 > /file-directive               # author Directive; status:proposed, reviewer-gated
-> /activate-directive <N>       # Proposed → Active (removes status:proposed)
+> /activate <N>                 # Proposed → Active (removes status:proposed)
+                                # (`/activate-directive` is a deprecated one-cycle alias)
 > /file-issue --parent <N> <description>   # spawn Execution Issue parented under Directive #N
+> /activate <execution-#>       # Proposed → Active (every Issue is gated before /work-on)
 > /work-on <execution-#>        # eng-mode from here on
 > /ship
-# ... repeat /file-issue --parent / /work-on / /ship per Execution Issue ...
+# ... repeat /file-issue --parent / /activate / /work-on / /ship per Execution Issue ...
 > /complete-directive <N>       # reviewer evaluates closed-Execution-Issue evidence
 ```
 
@@ -97,6 +100,7 @@ $ git checkout -b feature/directive-<N> && git push -u origin feature/directive-
 
 # Inside the session, for each Execution Issue under the Directive:
 > /file-issue --parent <N> <description>
+> /activate <execution-#>                                # Proposed → Active (required before /work-on)
 > /work-on <execution-#> --base feature/directive-<N>   # sub-task PR; uses Refs #<execution-#>
 > /ship
 
@@ -116,16 +120,17 @@ The Directive Issue itself is never branched — the `proposed-protect` hook blo
 
 ### Dir-mode substrate (Project v2)
 
-For **dir-mode** (SPEC §1.7), bootstrap the GitHub Project v2 substrate from inside a registered target repo:
+For **dir-mode** (SPEC §1.7), the canonical installer is `/onboard-dir-mode --tier 3` — it provisions the GitHub Project v2 substrate (along with labels, Issue templates, and workflows) and invokes `scripts/setup_project.sh` for you. To (re-)run just the Project bootstrap from inside a registered target repo:
 
 ```bash
 ./scripts/setup_project.sh   # idempotent — creates "<repo-name> roadmap" with
-                             # 6 fields and links to the repo. On re-run,
-                             # reconciles SINGLE_SELECT options additively
-                             # (preserves user-added options). The Iteration
-                             # field is user-added via the GH UI (gh CLI lacks
-                             # the ITERATION data-type). Schema locked
-                             # inline in scripts/setup_project.sh.
+                             # 4 gh-created fields (Type, Status, Priority, Parent)
+                             # and links to the repo. On re-run, reconciles
+                             # SINGLE_SELECT options additively (preserves
+                             # user-added options). The Iteration field is
+                             # user-added via the GH UI (gh CLI lacks the
+                             # ITERATION data-type). Schema locked inline in
+                             # scripts/setup_project.sh.
 ```
 
 ## Operating modes
@@ -144,7 +149,7 @@ Set per-target with `echo unattended > .claude/state/mode`. Override per-invocat
 - Edits to `.env`, `*.pem`, `credentials*`
 - Edit/Write outside the registered scope, and `rm -rf`/`mv -f`/`cp -f` against out-of-registry paths
 - `gh pr merge` when a linked issue has unchecked AC and no `## AC closeout` marker comment (`/ship` step 7.6 invokes `scripts/ac_closeout.sh` to satisfy by construction)
-- Branch creation against a Directive Issue (Directives are not directly executable — must be turned into Execution Issues first via `/file-issue --parent`)
+- Branch creation against any `status:proposed` Issue (run `/activate <N>` first) or any Directive Issue (Directives are never executable directly — spin out Execution Issues via `/file-issue --parent`). This is the `proposed-protect` hook.
 - `gh issue close` without `--reason completed` on a trusted-filer Issue; `--remove-label directive` from any filer
 
 Every block is escapable via `SKIP_HOOKS=<category> SKIP_REASON='<why>' <command>` and audit-logged at `.claude/audit/audit.jsonl`. SessionStart surfaces silent-no-op states (workspace injected but launched via plain `claude` instead of `claude-eng`, or `hookrt.sh` missing) — otherwise the hooks would evaporate without warning. See SPEC §6.1 / §6.5 / §7 for the full enforcement surface and the structural tuning mechanisms for repeated false positives.
