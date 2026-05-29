@@ -23,7 +23,7 @@ Each tier is a strict superset. Re-running is idempotent at every step.
 
 5. **Tier 2** (label install):
    - Invoke `bash $CLAUDE_ENG_SHELL_ROOT/scripts/onboard_target.sh --tier 2` (idempotent — uses `gh label create --force`).
-   - Verify via `gh label list` that all 11 labels exist: `directive`, `status:proposed`, `status:blocked`, `task`, `needs-triage`, `discussion`, `P0`, `P1`, `P2`, `P3`, `skip-changelog` (the last is the documented PR-time opt-out for the release-backbone fragment-gate per SPEC §18.6).
+   - Verify via `gh label list` that all 12 labels exist: `directive`, `status:proposed`, `status:blocked`, `awaiting-author`, `task`, `needs-triage`, `discussion`, `P0`, `P1`, `P2`, `P3`, `skip-changelog` (`awaiting-author` — #172 — marks the reviewer→author handoff after a `revise`/trusted-reject; `skip-changelog` is the documented PR-time opt-out for the release-backbone fragment-gate per SPEC §18.6).
 
 6. **Tier 3** (full substrate):
    - Run step 5 (tier 2 prerequisite).

@@ -7,7 +7,7 @@
 #
 # Tier semantics (SPEC §1.7 Substrate-in-target contract):
 #   1 — no-op (eng-mode only; no substrate installed).
-#   2 — labels: the 10-label v3 set via `gh label create --force`.
+#   2 — labels: the 12-label v3 set via `gh label create --force`.
 #   3 — tier 2 + ISSUE_TEMPLATE + workflows (via PR) + Project v2.
 
 set -euo pipefail
@@ -99,7 +99,7 @@ if [ -n "$DRY_RUN" ]; then
   # Mirror the spec inline for dry-run visibility.
   ensure_label "status:proposed" "FBCA04" "Directive proposed; awaiting maintainer triage (SPEC §2.1 v3)"
   ensure_label "status:blocked"  "B60205" "Directive cannot proceed without external input (SPEC §5.17)"
-  ensure_label "awaiting-author"  "D93F0B" "Reviewer delivered a verdict (revise / trusted-filer reject); author action pending (SPEC §2.1, #172)"
+  ensure_label "awaiting-author"  "F9D0C4" "Reviewer delivered a verdict (revise / trusted-filer reject); author action pending (SPEC §2.1, #172)"
   ensure_label "task"            "C5DEF5" "Standalone task or small improvement (not parented under a Directive)"
   ensure_label "needs-triage"    "D4C5F9" "Issue filed without a template — awaiting maintainer triage classification"
   ensure_label "discussion"      "FEF2C0" "Observation or half-formed idea; close as promoted (#M) or no-action (SPEC §5.19)"
@@ -118,7 +118,7 @@ ensure_label "P3" "0E8A16" "Priority 3 — eventually"
 echo "onboard_target: tier 2 labels done (12 total: 7 from ensure_v3_labels.sh + 5 inline)."
 
 if [ "$TIER" = 2 ]; then
-  audit_log info onboard-dir-mode created "target=$TARGET_OWNER_REPO tier=2 labels=11"
+  audit_log info onboard-dir-mode created "target=$TARGET_OWNER_REPO tier=2 labels=12"
   exit 0
 fi
 

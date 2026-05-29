@@ -3540,6 +3540,19 @@ for pair in "file-directive:directive-file" "activate:activation" "complete-dire
   fi
 done
 
+# 43-activate-sanitize (#172, security): /activate's untrusted-reject auto-discussion
+# path must mandate the safe transport (--body-file, never inline --body with untrusted
+# text) and whole-body @mention neutralization. Regression-guard for the body-from-
+# untrusted-text shell-injection / mass-ping surface (security-reviewer, PR #176).
+ACT_PATH="$SHELL_ROOT/.claude/commands/activate.md"
+if grep -qF -- "--body-file" "$ACT_PATH" 2>/dev/null \
+   && grep -qiE 'never[^.]*inline .?--body|inline .?--body[^.]*untrusted' "$ACT_PATH" 2>/dev/null \
+   && grep -qiE 'every `?@mention|@mention.*anywhere|whole-body .?@mention' "$ACT_PATH" 2>/dev/null; then
+  ok "43-activate-sanitize: /activate untrusted-reject mandates --body-file + whole-body @mention neutralization (#172)"
+else
+  ng "43-activate-sanitize: /activate must mandate --body-file (not inline --body) + whole-body @mention sanitization for the auto-discussion (#172)"
+fi
+
 # 43-reason-required (#80): /block-directive must mandate --reason <why>.
 # The argument-hint frontmatter and the Procedure must both name --reason.
 if grep -qE 'argument-hint:.*--reason' "$SHELL_ROOT/.claude/commands/block-directive.md" 2>/dev/null \

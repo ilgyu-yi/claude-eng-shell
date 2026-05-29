@@ -50,31 +50,31 @@ You assume no prior knowledge of the main assistant's discussion. The reviewed b
 
 **1. Schema completeness** — does the body cover Objective / Success signals / Non-goals / Constraints / MISSION fit?
 - Pass: all five sections present with substantive content (each at least one sentence beyond the heading).
-- Fail (refine): any section missing or stub-only ("TBD", "tbc", a single placeholder word).
-- Fail (block): three or more sections missing — the body is a fragment.
+- Fail (revise): any section missing or stub-only ("TBD", "tbc", a single placeholder word).
+- Fail (reject): three or more sections missing — the body is a fragment.
 
 **2. Success-signal verifiability** — can each signal be objectively tested by a reasonable engineer?
 - Pass: "PR #N merges and N+1 follow-on PRs reference this Directive in `Parent Directive: #N`." / "Smoke §M asserts X." / "User-survey score on Y rises above Z." / "Issue-reviewer rejection rate drops below 20% over the next 10 issues."
-- Fail (refine): vague — "Engineering reviews go faster" without a metric; "Code quality improves" without a measurement.
+- Fail (revise): vague — "Engineering reviews go faster" without a metric; "Code quality improves" without a measurement.
 
 **3. Scope clarity** — is the Objective bounded by a recognizable boundary in artifact terms (file paths, issue counts, AC ticks, merge events)?
 - Pass: "Cover the Doc → Test → Code work-order under the existing eng-mode flow with N Execution Issues that land their respective `feat:` PRs."
-- Fail (refine): "Improve dir-mode usability" — no boundary.
-- Fail (block): "Make the codebase better" — no boundary AND no concrete artifact reference.
+- Fail (revise): "Improve dir-mode usability" — no boundary.
+- Fail (reject): "Make the codebase better" — no boundary AND no concrete artifact reference.
 
 **4. Non-goal clarity** — are at least two explicit exclusions stated?
 - Pass: "Does NOT include cross-target Directive sharing (v2+)." + "Does NOT include automatic Directive sequencing — that's the orchestrator (v1+)."
-- Fail (refine): "No non-goals — everything in scope" — usually a sign of unbounded scope (see check 3).
+- Fail (revise): "No non-goals — everything in scope" — usually a sign of unbounded scope (see check 3).
 
 **5. Active-Directive conflict** — does the proposed Directive overlap with an existing `Status=Active` Directive's Objective or Success signals?
 - Pass: scan the active list; no Directive shares the same Objective verb-object pair or addresses the same files/components.
-- Fail (refine): tangential overlap — "Both touch the hook subsystem but address different concerns" — point to the relevant active Directive number and recommend a refinement of scope to clarify the distinction.
-- Fail (block): direct duplicate or contradiction — "This Directive contradicts active Directive #N by proposing the opposite trade-off."
+- Fail (revise): tangential overlap — "Both touch the hook subsystem but address different concerns" — point to the relevant active Directive number and recommend a refinement of scope to clarify the distinction.
+- Fail (reject): direct duplicate or contradiction — "This Directive contradicts active Directive #N by proposing the opposite trade-off."
 
 **6. Evidence sufficiency (completion only)** — do the linked Execution Issues collectively satisfy each success signal as written?
 - Pass: every signal maps to at least one linked Execution Issue that is closed/merged with relevant AC ticked, AND the body of those Execution Issues references the signal it advances (or the success signal is mechanically verifiable from artifact state — e.g., "smoke §41 passes" → check the latest smoke run via `gh pr checks`).
-- Fail (refine): one or more signals lack a linked Execution Issue; recommend filing the missing Issue (caller routes to `/file-issue --parent <directive-id>`).
-- Fail (block): a signal is contradicted by the artifact state (e.g., signal "no regressions in smoke" but the latest smoke run on `main` is red).
+- Fail (revise): one or more signals lack a linked Execution Issue; recommend filing the missing Issue (caller routes to `/file-issue --parent <directive-id>`).
+- Fail (reject): a signal is contradicted by the artifact state (e.g., signal "no regressions in smoke" but the latest smoke run on `main` is red).
 
 ## Execution rulebook
 
@@ -93,21 +93,21 @@ You assume no prior knowledge of the main assistant's discussion. The reviewed b
 
 **1. Schema completeness** — does the body cover What / Why / Acceptance criteria / Out of scope?
 - Pass: each present with substantive content.
-- Fail (refine): any missing or stub-only.
-- Fail (block): the body is a fragment (most sections missing).
+- Fail (revise): any missing or stub-only.
+- Fail (reject): the body is a fragment (most sections missing).
 
 **2. Acceptance-criteria verifiability** — is each AC objectively checkable by a reasonable engineer (a command, an artifact assertion, a smoke section), not "feels better"?
 - Pass: "`grep -rl X .claude/` returns nothing." / "Smoke §M passes." / "File Y exists and references Z."
-- Fail (refine): vague AC — "the code is cleaner", "works well".
+- Fail (revise): vague AC — "the code is cleaner", "works well".
 
 **3. Scope clarity** — is the What bounded (named files, a concrete change), and is the Out-of-scope explicit?
-- Fail (refine): unbounded What or empty Out-of-scope on a multi-part change.
+- Fail (revise): unbounded What or empty Out-of-scope on a multi-part change.
 
 **4. MISSION / parent fit** — does Why name a MISSION item or trace to the parent Directive's MISSION fit?
-- Fail (refine): no MISSION trace and no parent linkage.
+- Fail (revise): no MISSION trace and no parent linkage.
 
 **5. Duplicate / coverage** — does an existing open Issue or PR already cover this?
-- Fail (refine/block): direct duplicate — point to the Issue number.
+- Fail (revise/reject): direct duplicate — point to the Issue number.
 
 ## Output
 
