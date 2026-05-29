@@ -4278,9 +4278,9 @@ fi
 
 rm -rf "$S53_DIR"
 
-# ---------- 54. Issue templates + auto-needs-triage workflow (#93 / Directive #92) ----------
+# ---------- 54. Issue templates + auto-status-proposed workflow (#93 / Directive #92) ----------
 # Cluster A of the v3 reframe (dir-mode-v3 brief §9.1): the .github/ISSUE_TEMPLATE/*.yml
-# files plus the auto-needs-triage workflow. Structural sanity — files exist + parse
+# files plus the auto-status-proposed workflow. Structural sanity — files exist + parse
 # as YAML + the templates carry the expected `name`/`description`/`body` top-level keys
 # + the four expected labels are named in the right templates.
 
@@ -4295,18 +4295,35 @@ else
   ng "54a: Issue template files missing:$s54a_missing (#93)"
 fi
 
-# 54b: auto-needs-triage workflow exists.
-if [ -f "$SHELL_ROOT/.github/workflows/auto-needs-triage.yml" ]; then
-  ok "54b: auto-needs-triage workflow present (#93)"
+# 54b: auto-status-proposed workflow exists (repurposed from auto-needs-triage, #179).
+ASP_WF="$SHELL_ROOT/.github/workflows/auto-status-proposed.yml"
+if [ -f "$ASP_WF" ]; then
+  ok "54b: auto-status-proposed workflow present (#93/#179)"
 else
-  ng "54b: .github/workflows/auto-needs-triage.yml missing (#93)"
+  ng "54b: .github/workflows/auto-status-proposed.yml missing (#93/#179)"
 fi
 
 # 54c: workflow fires on `issues.opened`.
-if grep -qE "^[[:space:]]+types:[[:space:]]*\[opened\]" "$SHELL_ROOT/.github/workflows/auto-needs-triage.yml" 2>/dev/null; then
-  ok "54c: auto-needs-triage workflow fires on issues.opened (#93)"
+if grep -qE "^[[:space:]]+types:[[:space:]]*\[opened\]" "$ASP_WF" 2>/dev/null; then
+  ok "54c: auto-status-proposed workflow fires on issues.opened (#93/#179)"
 else
-  ng "54c: auto-needs-triage workflow trigger missing `types: [opened]` (#93)"
+  ng "54c: auto-status-proposed workflow trigger missing `types: [opened]` (#93/#179)"
+fi
+
+# 54c2: workflow applies status:proposed + task (NOT needs-triage) on label-free filings (#179).
+if grep -q -- '--add-label "status:proposed"' "$ASP_WF" 2>/dev/null \
+   && grep -q -- '--add-label "task"' "$ASP_WF" 2>/dev/null \
+   && ! grep -q 'needs-triage' "$ASP_WF" 2>/dev/null; then
+  ok "54c2: auto-status-proposed applies status:proposed+task, no needs-triage (#179)"
+else
+  ng "54c2: auto-status-proposed must apply status:proposed+task and drop needs-triage (#179)"
+fi
+
+# 54c3: both workflow copies (.github + target-substrate) byte-identical (#179).
+if diff -q "$ASP_WF" "$SHELL_ROOT/.claude/templates/target-substrate/workflows/auto-status-proposed.yml" >/dev/null 2>&1; then
+  ok "54c3: auto-status-proposed workflow copies byte-identical (#179)"
+else
+  ng "54c3: auto-status-proposed .github vs target-substrate copies differ (#179)"
 fi
 
 # 54d: directive-proposal template applies `directive` + `status:proposed` labels at filing.
@@ -4327,19 +4344,19 @@ fi
 if [ -x "$SHELL_ROOT/scripts/ensure_v3_labels.sh" ] \
    && grep -q "status:proposed" "$SHELL_ROOT/scripts/ensure_v3_labels.sh" \
    && grep -q "status:blocked" "$SHELL_ROOT/scripts/ensure_v3_labels.sh" \
-   && grep -q "needs-triage" "$SHELL_ROOT/scripts/ensure_v3_labels.sh" \
+   && ! grep -q "needs-triage" "$SHELL_ROOT/scripts/ensure_v3_labels.sh" \
    && grep -q "awaiting-author" "$SHELL_ROOT/scripts/ensure_v3_labels.sh" \
    && grep -q "ensure_label.*\"task\"" "$SHELL_ROOT/scripts/ensure_v3_labels.sh"; then
-  ok "54f: ensure_v3_labels.sh creates status:proposed + status:blocked + task + needs-triage + awaiting-author (#93/#172)"
+  ok "54f: ensure_v3_labels.sh creates status:proposed + status:blocked + task + awaiting-author; no needs-triage (#93/#172/#179)"
 else
-  ng "54f: ensure_v3_labels.sh missing or doesn't name all dir-mode labels incl awaiting-author (#93/#172)"
+  ng "54f: ensure_v3_labels.sh label set wrong (needs-triage must be retired, awaiting-author present) (#93/#172/#179)"
 fi
 
 # 54g: YAML structural sanity via python+pyyaml when available.
 if command -v python3 >/dev/null 2>&1 && python3 -c "import yaml" 2>/dev/null; then
   s54g_fails=0
   s54g_list=""
-  for f in "$SHELL_ROOT"/.github/ISSUE_TEMPLATE/*.yml "$SHELL_ROOT"/.github/workflows/auto-needs-triage.yml; do
+  for f in "$SHELL_ROOT"/.github/ISSUE_TEMPLATE/*.yml "$SHELL_ROOT"/.github/workflows/auto-status-proposed.yml; do
     [ -f "$f" ] || continue
     if ! python3 -c "import yaml; yaml.safe_load(open('$f'))" 2>/dev/null; then
       s54g_fails=$((s54g_fails+1))
@@ -4492,15 +4509,15 @@ else
   ng "56a: /triage command file missing (#94/#173)"
 fi
 
-# 56b: /triage is a deprecation alias — delegates to /activate AND names the
-# Phase-2 raw-filing gap honestly (does not imply /activate does needs-triage
-# classification).
+# 56b: /triage is a deprecation alias — delegates to /activate. The former
+# Phase-2 raw-filing gap was CLOSED by #179 (raw filings now auto-stamped
+# status:proposed+task), so the alias names that behavior, not a pending gap.
 if grep -qE '/activate' "$TRIAGE_CMD" 2>/dev/null \
    && grep -qiE 'alias|deprecat' "$TRIAGE_CMD" 2>/dev/null \
-   && grep -qiE 'phase[ -]?2|needs-triage.*(phase|raw)|raw[- ]filing' "$TRIAGE_CMD" 2>/dev/null; then
-  ok "56b: /triage is a deprecation alias for /activate naming the Phase-2 gap (#173)"
+   && grep -qiE 'auto-status-proposed|status:proposed.+task|raw[- ]filing' "$TRIAGE_CMD" 2>/dev/null; then
+  ok "56b: /triage is a deprecation alias for /activate; names the #179 raw-filing behavior (#173/#179)"
 else
-  ng "56b: /triage must be an alias delegating to /activate + naming the Phase-2 raw-filing gap (#173)"
+  ng "56b: /triage must be an alias delegating to /activate + naming the #179 raw-filing status:proposed+task behavior (#173/#179)"
 fi
 
 # 56c: triage-reviewer subagent file is DELETED (#173 hard-delete).
@@ -4952,7 +4969,7 @@ s63a_count=0
 for f in ISSUE_TEMPLATE/config.yml ISSUE_TEMPLATE/directive-proposal.yml \
          ISSUE_TEMPLATE/execution-under-directive.yml ISSUE_TEMPLATE/task.yml \
          ISSUE_TEMPLATE/bug-report.yml ISSUE_TEMPLATE/discussion.yml \
-         workflows/auto-needs-triage.yml workflows/issues-to-project-mirror.yml \
+         workflows/auto-status-proposed.yml workflows/issues-to-project-mirror.yml \
          workflows/dir-mode-post-merge.yml workflows/check-changelog.yml; do
   [ -f "$S63_SUB/$f" ] && s63a_count=$((s63a_count + 1))
 done
@@ -5031,7 +5048,7 @@ fi
 # exercise label parsing; §63g closes the gap.
 s63g_out=$("$SHELL_ROOT/scripts/onboard_target.sh" --tier 2 --dry-run 2>&1 || true)
 s63g_ok=1
-for required in "status:proposed" "status:blocked" "awaiting-author" "discussion" "task" "needs-triage" "skip-changelog"; do
+for required in "status:proposed" "status:blocked" "awaiting-author" "discussion" "task" "skip-changelog"; do
   if ! printf '%s' "$s63g_out" | grep -qE "gh label create '$required'"; then
     s63g_ok=0
     break
