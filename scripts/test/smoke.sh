@@ -3297,14 +3297,14 @@ else
     ng "42b: activation-reviewer body missing sections:$dr_missing (#44)"
   fi
 
-  # 42c: VERDICT-line format documents the three terminal verdicts (matches
-  # SPEC §4.7 / §4.8 reviewer convention).
-  if grep -qE '^- `VERDICT: ship' "$DR_PATH" \
-     && grep -qE '^- `VERDICT: refine' "$DR_PATH" \
-     && grep -qE '^- `VERDICT: block' "$DR_PATH"; then
-    ok "42c: VERDICT-line format documents ship / refine / block (#44)"
+  # 42c: VERDICT-line format documents the three terminal verdicts. #172
+  # replaced ship/refine/block with pass/revise/reject for activation-reviewer.
+  if grep -qE '^- `VERDICT: pass' "$DR_PATH" \
+     && grep -qE '^- `VERDICT: revise' "$DR_PATH" \
+     && grep -qE '^- `VERDICT: reject' "$DR_PATH"; then
+    ok "42c: VERDICT-line format documents pass / revise / reject (#44/#172)"
   else
-    ng "42c: VERDICT-line format incomplete (#44)"
+    ng "42c: VERDICT-line format incomplete (#44/#172)"
   fi
 
   # 42d: tools restricted to the standard reviewer read-only set
@@ -3320,11 +3320,12 @@ fi
 # Gated behind CLAUDE_ENG_BEHAVIORAL_SMOKE=1. When set, shells out to the live
 # agent via `claude -p --agent activation-reviewer` and asserts the documented
 # VERDICT-line output on three synthetic bodies (both Issue types, per #170):
-#   - case A: minimal-but-valid Directive body  → ^VERDICT: ship
+#   - case A: minimal-but-valid Directive body  → ^VERDICT: pass
 #   - case B: Directive body missing the entire ## Success signals heading
-#                                               → ^VERDICT: (refine|block)
-#   - case C: minimal-but-valid Execution body  → ^VERDICT: ship
+#                                               → ^VERDICT: (revise|reject)
+#   - case C: minimal-but-valid Execution body  → ^VERDICT: pass
 #             (exercises the type-neutral Execution rulebook dispatch)
+# Verdict vocab is pass/revise/reject (#172, replaced ship/refine/block).
 # Default-unset → no-op so smoke stays offline + deterministic (preserves the
 # 278/278 baseline). See SPEC §4.9.3 for the routing-regression contract this
 # block protects.
@@ -3378,16 +3379,16 @@ PROMPT_EOF
     # Anchoring avoids matching prose quotes of the agent's own `## Verdict
     # dispatch` section if the agent cites itself; `tail -1` picks the terminal
     # verdict if multiple anchored lines somehow appear.
-    dr_ship_verdict=$(printf '%s\n' "$dr_ship_out" | grep -E '^VERDICT: (ship —|ship -|refine:|block:)' | tail -1)
+    dr_ship_verdict=$(printf '%s\n' "$dr_ship_out" | grep -E '^VERDICT: (pass —|pass -|revise:|reject:)' | tail -1)
     case "$dr_ship_verdict" in
-      "VERDICT: ship"*)
-        ok "42e-ship: activation-reviewer returns 'ship' on minimal-but-valid synthetic body (#69)" ;;
+      "VERDICT: pass"*)
+        ok "42e-pass: activation-reviewer returns 'pass' on minimal-but-valid synthetic body (#69/#172)" ;;
       *)
         # On miss, surface the first 200 chars of the agent's output so the
         # next operator can tell live-agent failures (auth, rate-limit, model
         # overloaded) apart from genuine verdict regressions.
         dr_ship_head=$(printf '%s' "$dr_ship_out" | head -c 200 | tr '\n' ' ')
-        ng "42e-ship: expected '^VERDICT: ship', got '$dr_ship_verdict' [out: $dr_ship_head] (#69)" ;;
+        ng "42e-pass: expected '^VERDICT: pass', got '$dr_ship_verdict' [out: $dr_ship_head] (#69/#172)" ;;
     esac
 
     # Case B — synthetic body missing the entire ## Success signals heading.
@@ -3416,13 +3417,13 @@ Keep `scripts/test/smoke.sh`'s default-unset path at exactly 278 passing asserti
 Synthetic test environment for the dir-mode workflow.
 PROMPT_EOF
     dr_refine_out=$(claude -p --agent activation-reviewer "$dr_refine_prompt" 2>&1 || true)
-    dr_refine_verdict=$(printf '%s\n' "$dr_refine_out" | grep -E '^VERDICT: (ship —|ship -|refine:|block:)' | tail -1)
+    dr_refine_verdict=$(printf '%s\n' "$dr_refine_out" | grep -E '^VERDICT: (pass —|pass -|revise:|reject:)' | tail -1)
     case "$dr_refine_verdict" in
-      "VERDICT: refine"*|"VERDICT: block"*)
-        ok "42e-refine-or-block: activation-reviewer rejects body missing '## Success signals' (got '$dr_refine_verdict') (#69)" ;;
+      "VERDICT: revise"*|"VERDICT: reject"*)
+        ok "42e-revise-or-reject: activation-reviewer rejects body missing '## Success signals' (got '$dr_refine_verdict') (#69/#172)" ;;
       *)
         dr_refine_head=$(printf '%s' "$dr_refine_out" | head -c 200 | tr '\n' ' ')
-        ng "42e-refine-or-block: expected '^VERDICT: refine' or '^VERDICT: block', got '$dr_refine_verdict' [out: $dr_refine_head] (#69)" ;;
+        ng "42e-revise-or-reject: expected '^VERDICT: revise' or '^VERDICT: reject', got '$dr_refine_verdict' [out: $dr_refine_head] (#69/#172)" ;;
     esac
 
     # Case C — synthetic minimal-but-valid EXECUTION Issue body (#170). The
@@ -3445,7 +3446,7 @@ Serves Directive #167's context-narrowing mechanism via its `## MISSION fit`: th
 
 ## Acceptance criteria
 - [ ] `CLAUDE_ENG_BEHAVIORAL_SMOKE=1 bash scripts/test/smoke.sh` adds a passing `42e-exec` assertion.
-- [ ] The assertion calls `claude -p --agent activation-reviewer` with an Execution-shaped body and asserts `^VERDICT: ship`.
+- [ ] The assertion calls `claude -p --agent activation-reviewer` with an Execution-shaped body and asserts `^VERDICT: pass`.
 
 ## Out of scope
 - The 3-state pass/revise/reject verdict contract (Issue #172).
@@ -3454,13 +3455,13 @@ Serves Directive #167's context-narrowing mechanism via its `## MISSION fit`: th
 - Refs #170.
 PROMPT_EOF
     dr_exec_out=$(claude -p --agent activation-reviewer "$dr_exec_prompt" 2>&1 || true)
-    dr_exec_verdict=$(printf '%s\n' "$dr_exec_out" | grep -E '^VERDICT: (ship —|ship -|refine:|block:)' | tail -1)
+    dr_exec_verdict=$(printf '%s\n' "$dr_exec_out" | grep -E '^VERDICT: (pass —|pass -|revise:|reject:)' | tail -1)
     case "$dr_exec_verdict" in
-      "VERDICT: ship"*)
-        ok "42e-exec: activation-reviewer returns 'ship' on minimal-but-valid Execution body (#170)" ;;
+      "VERDICT: pass"*)
+        ok "42e-exec: activation-reviewer returns 'pass' on minimal-but-valid Execution body (#170/#172)" ;;
       *)
         dr_exec_head=$(printf '%s' "$dr_exec_out" | head -c 200 | tr '\n' ' ')
-        ng "42e-exec: expected '^VERDICT: ship' on Execution body, got '$dr_exec_verdict' [out: $dr_exec_head] (#170)" ;;
+        ng "42e-exec: expected '^VERDICT: pass' on Execution body, got '$dr_exec_verdict' [out: $dr_exec_head] (#170/#172)" ;;
     esac
   fi
 fi
@@ -3491,7 +3492,7 @@ else
   fi
 fi
 
-for cmd in file-directive list-directives activate-directive complete-directive link-directive revise-directive block-directive; do
+for cmd in file-directive list-directives activate activate-directive complete-directive link-directive revise-directive block-directive; do
   cmd_path="$SHELL_ROOT/.claude/commands/$cmd.md"
   if [ ! -f "$cmd_path" ]; then
     ng "43-$cmd: command file missing (#45/#80)"
@@ -3511,7 +3512,7 @@ done
 # SPEC §5.10/§5.12/§5.13/§5.16). block-directive is intentionally NOT
 # reviewer-gated (annotation-only — SPEC §5.17) and is asserted separately
 # below (43-no-reviewer-block).
-for cmd in file-directive activate-directive complete-directive revise-directive; do
+for cmd in file-directive activate activate-directive complete-directive revise-directive; do
   if grep -qF "activation-reviewer" "$SHELL_ROOT/.claude/commands/$cmd.md" 2>/dev/null; then
     ok "43-reviewer-$cmd: command references activation-reviewer at the gated step (#45/#80)"
   else
@@ -3529,7 +3530,7 @@ else
 fi
 
 # 43-audit-cat: each non-read-only command names its audit category.
-for pair in "file-directive:directive-file" "activate-directive:directive-activate" "complete-directive:directive-complete" "link-directive:directive-link" "revise-directive:directive-revise" "block-directive:directive-block"; do
+for pair in "file-directive:directive-file" "activate:activation" "complete-directive:directive-complete" "link-directive:directive-link" "revise-directive:directive-revise" "block-directive:directive-block"; do
   cmd="${pair%%:*}"
   cat="${pair##*:}"
   if grep -qF "$cat" "$SHELL_ROOT/.claude/commands/$cmd.md" 2>/dev/null; then
@@ -3538,6 +3539,19 @@ for pair in "file-directive:directive-file" "activate-directive:directive-activa
     ng "43-audit-$cmd: command does not name audit category '$cat' (#45/#80)"
   fi
 done
+
+# 43-activate-sanitize (#172, security): /activate's untrusted-reject auto-discussion
+# path must mandate the safe transport (--body-file, never inline --body with untrusted
+# text) and whole-body @mention neutralization. Regression-guard for the body-from-
+# untrusted-text shell-injection / mass-ping surface (security-reviewer, PR #176).
+ACT_PATH="$SHELL_ROOT/.claude/commands/activate.md"
+if grep -qF -- "--body-file" "$ACT_PATH" 2>/dev/null \
+   && grep -qiE 'never[^.]*inline .?--body|inline .?--body[^.]*untrusted' "$ACT_PATH" 2>/dev/null \
+   && grep -qiE 'every `?@mention|@mention.*anywhere|whole-body .?@mention' "$ACT_PATH" 2>/dev/null; then
+  ok "43-activate-sanitize: /activate untrusted-reject mandates --body-file + whole-body @mention neutralization (#172)"
+else
+  ng "43-activate-sanitize: /activate must mandate --body-file (not inline --body) + whole-body @mention sanitization for the auto-discussion (#172)"
+fi
 
 # 43-reason-required (#80): /block-directive must mandate --reason <why>.
 # The argument-hint frontmatter and the Procedure must both name --reason.
@@ -4309,15 +4323,16 @@ else
   ng "54e: execution-under-directive.yml missing parent-directive input (#93)"
 fi
 
-# 54f: ensure_v3_labels.sh creates the four new labels.
+# 54f: ensure_v3_labels.sh creates the dir-mode labels (incl. awaiting-author, #172).
 if [ -x "$SHELL_ROOT/scripts/ensure_v3_labels.sh" ] \
    && grep -q "status:proposed" "$SHELL_ROOT/scripts/ensure_v3_labels.sh" \
    && grep -q "status:blocked" "$SHELL_ROOT/scripts/ensure_v3_labels.sh" \
    && grep -q "needs-triage" "$SHELL_ROOT/scripts/ensure_v3_labels.sh" \
+   && grep -q "awaiting-author" "$SHELL_ROOT/scripts/ensure_v3_labels.sh" \
    && grep -q "ensure_label.*\"task\"" "$SHELL_ROOT/scripts/ensure_v3_labels.sh"; then
-  ok "54f: ensure_v3_labels.sh creates status:proposed + status:blocked + task + needs-triage (#93)"
+  ok "54f: ensure_v3_labels.sh creates status:proposed + status:blocked + task + needs-triage + awaiting-author (#93/#172)"
 else
-  ng "54f: ensure_v3_labels.sh missing or doesn't name all 4 new labels (#93)"
+  ng "54f: ensure_v3_labels.sh missing or doesn't name all dir-mode labels incl awaiting-author (#93/#172)"
 fi
 
 # 54g: YAML structural sanity via python+pyyaml when available.
@@ -5013,7 +5028,9 @@ fi
 # one-liner introduced by Directive #149 / Issue #151 (the 4-line boilerplate
 # was de-duplicated to a single shared statement per AC #4).
 s63e_count=0
-for cmd in file-directive activate-directive complete-directive revise-directive \
+# activate-directive is now a thin alias (#172) delegating its preflight to
+# /activate; the loop tracks the real command /activate.
+for cmd in file-directive activate complete-directive revise-directive \
            block-directive list-directives link-directive; do
   if grep -qE "Step 0.*preflight|step 0 preflight|Substrate preflight" "$SHELL_ROOT/.claude/commands/${cmd}.md"; then
     s63e_count=$((s63e_count + 1))
@@ -5043,7 +5060,7 @@ fi
 # exercise label parsing; §63g closes the gap.
 s63g_out=$("$SHELL_ROOT/scripts/onboard_target.sh" --tier 2 --dry-run 2>&1 || true)
 s63g_ok=1
-for required in "status:proposed" "status:blocked" "discussion" "task" "needs-triage" "skip-changelog"; do
+for required in "status:proposed" "status:blocked" "awaiting-author" "discussion" "task" "needs-triage" "skip-changelog"; do
   if ! printf '%s' "$s63g_out" | grep -qE "gh label create '$required'"; then
     s63g_ok=0
     break
