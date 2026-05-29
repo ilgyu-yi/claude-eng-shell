@@ -90,3 +90,34 @@ is_proposed_issue() {
     return 1
   fi
 }
+
+# issue_has_parent_marker <issue#> — TRI-STATE resolver for the canonical line-1
+# `Parent Directive: #N` marker (the same resolver /link-directive writes and
+# /reflect + the issues-to-project-mirror / dir-mode-post-merge workflows read;
+# every consumer reads the FIRST body line, so "parented" is defined as the
+# line-1 marker — see issues-to-project-mirror.yml).
+#   rc 0 → marker present (body line 1 matches `^Parent Directive: #[0-9]+$`)
+#   rc 1 → resolved, marker ABSENT
+#   rc 2 → unresolvable (not a number / gh failure / no auth / issue not found)
+# The tri-state is load-bearing for the `label-parent-consistency` matcher
+# (§6.1): that matcher blocks `--add-label execution` on the ABSENCE of a marker,
+# so it MUST distinguish a resolved-absent body (rc 1 → block) from an
+# unresolvable one (rc 2 → fail-open allow). A plain 0/1 predicate would conflate
+# the two and block on gh-down — the opposite of the §6.1 fail-open contract.
+# UNCACHED, like is_proposed_issue: the marker is volatile (/link-directive
+# prepends it post-creation; a relabel may add/remove it), so a stale cache would
+# mis-gate a just-edited Issue until session restart.
+issue_has_parent_marker() {
+  local issue="$1"
+  case "$issue" in
+    ''|*[!0-9]*) return 2 ;;  # not a number → cannot resolve → fail open
+  esac
+
+  local body="" first_line=""
+  body=$(gh issue view "$issue" --json body -q .body 2>/dev/null) || return 2
+  first_line=$(printf '%s\n' "$body" | head -1 || true)
+  if printf '%s' "$first_line" | grep -qE '^Parent Directive: #[0-9]+$'; then
+    return 0
+  fi
+  return 1
+}
