@@ -5565,6 +5565,30 @@ else
   ng "70d: remote-only force-push should block (no explicit target) (#204)"
 fi
 
+# §70e: --mirror force-push → BLOCK even with a trailing positional. --mirror
+# pushes/deletes EVERY ref (incl. protected); the trailing token must not flip
+# the positional count to allow. (Security: closes the ref-set-flag bypass.)
+if [ "$(hook_run 'git push --force --mirror origin extra')" = "2" ]; then
+  ok "70e: --mirror force-push blocked despite trailing positional (#204)"
+else
+  ng "70e: --mirror force-push must block (targets all refs) (#204)"
+fi
+
+# §70f: --all force-push → BLOCK even with a trailing positional.
+if [ "$(hook_run 'git push --all --force origin extra')" = "2" ]; then
+  ok "70f: --all force-push blocked despite trailing positional (#204)"
+else
+  ng "70f: --all force-push must block (targets all branches) (#204)"
+fi
+
+# §70g: protected-token match is case-insensitive — `MAIN` collides with `main`
+# on case-insensitive filesystems (macOS/Windows), so it must block too.
+if [ "$(hook_run 'git push --force origin MAIN')" = "2" ]; then
+  ok "70g: case-folded protected target (MAIN) blocked (#204)"
+else
+  ng "70g: case-folded protected target should block (#204)"
+fi
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"

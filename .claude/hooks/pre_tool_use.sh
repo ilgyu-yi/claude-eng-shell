@@ -387,14 +387,25 @@ case "$tool" in
     #     non-protected, block. Escape: SKIP_HOOKS=force-push.
     if printf '%s' "$cmd" | grep -qE "${GIT_PREFIX}push\b.*(\-f\b|\-\-force\b|\-\-force-with-lease\b)"; then
       decided=
-      # Protected-token presence, computed off the `if printf|grep` form so the
-      # §39b structural sweep counts only the one matcher-entry line above.
+      # Protected-token presence + ref-set flags, computed off the `if printf|grep`
+      # form so the §39b structural sweep counts only the one matcher-entry line
+      # above. Case-insensitive (`-i`): a remote `MAIN`/`Main` collides with `main`
+      # on case-insensitive filesystems (default macOS/Windows), so a case-folded
+      # name is still a protected-clobber path.
       fp_protected=
-      printf '%s' "$cmd" | grep -qE "\b(${PROTECTED_BRANCH_PATTERN})\b" && fp_protected=1
+      printf '%s' "$cmd" | grep -qiE "\b(${PROTECTED_BRANCH_PATTERN})\b" && fp_protected=1
+      # --mirror/--all/--branches push EVERY ref (incl. protected) with no single
+      # verifiable target — and --mirror deletes remote refs absent locally. They
+      # carry no explicit branch to check, so they fall under the same
+      # "target can't be confirmed non-protected → block" fail-safe as a bare push.
+      fp_refset=
+      printf '%s' "$cmd" | grep -qE '(^|[[:space:]])--(mirror|all|branches)([[:space:]]|=|$)' && fp_refset=1
       if should_skip force-push; then
         decided=1
       elif [ -n "$fp_protected" ]; then
         block force-push "force push to a protected branch (${PROTECTED_BRANCH_PATTERN//|/, }) blocked"
+      elif [ -n "$fp_refset" ]; then
+        block force-push "force push with --mirror/--all/--branches is blocked: it targets every ref (including protected branches) with no verifiable single target. Name one branch: 'git push --force-with-lease origin <branch>'. Or SKIP_HOOKS=force-push SKIP_REASON='<why>'."
       else
         # Count positional (non-flag) tokens after `push`. An explicit
         # <remote> <refspec> pair (>=2 positionals) means the target is named
