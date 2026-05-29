@@ -112,7 +112,7 @@ EOF
 > /complete-directive <N>
 ```
 
-The Directive Issue itself is never branched — the `directive-protect` hook blocks `git checkout -b` against a Directive Issue. The Directive scopes the work; the Execution Issues do the work.
+The Directive Issue itself is never branched — the `proposed-protect` hook blocks `git checkout -b` against a Directive Issue (and against any `status:proposed` Issue). The Directive scopes the work; the Execution Issues do the work.
 
 ### Dir-mode substrate (Project v2)
 
