@@ -257,20 +257,23 @@ out=$(cd "$TMP/fake" && fake_input "Bash" "{\"command\":\"rm -rf \$HOME/somewher
 rc=$?
 [ "$rc" = 2 ] && ok "pre_tool_use blocks 'rm -rf \$HOME/...'" || ng "should block rm -rf \$HOME (rc=$rc)"
 
-# Bash force push
-out=$(cd "$TMP/fake" && fake_input "Bash" "{\"command\":\"git push --force origin feature\"}" \
+# Bash force push to an EXPLICIT non-protected branch → allowed (#204).
+# (Force-push to a named feature branch is the rebase-pull tail, SPEC §13.)
+out=$(cd "$TMP/fake" && fake_input "Bash" "{\"command\":\"git push --force-with-lease origin feature\"}" \
   | "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" 2>&1)
 rc=$?
-[ "$rc" = 2 ] && ok "pre_tool_use blocks force push" || ng "should block force push (rc=$rc)"
+[ "$rc" = 0 ] && ok "pre_tool_use allows force-push to explicit feature branch (#204)" || ng "should allow force-push to explicit feature branch (rc=$rc) (#204)"
 
-# Bash with escape — pass SKIP_HOOKS into pre_tool_use's environment via export
+# Bash with escape — SKIP_HOOKS=force-push bypasses a genuinely-blocked
+# force-push. Bare (no explicit target) is blocked under #204, so this
+# exercises the escape against a real block (not an allowed command).
 out=$(cd "$TMP/fake" && {
   export SKIP_HOOKS=force-push SKIP_REASON="emergency"
-  fake_input "Bash" "{\"command\":\"git push --force origin feature\"}" \
+  fake_input "Bash" "{\"command\":\"git push --force\"}" \
     | "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh"
 } 2>&1)
 rc=$?
-[ "$rc" = 0 ] && ok "escape SKIP_HOOKS=force-push passes" || ng "escape should pass (rc=$rc)"
+[ "$rc" = 0 ] && ok "escape SKIP_HOOKS=force-push passes (bare force-push)" || ng "escape should pass (rc=$rc)"
 
 # Hook transparent outside registry
 out=$(cd "$TMP" && fake_input "Edit" "{\"file_path\":\"/etc/passwd\"}" \
@@ -5515,6 +5518,51 @@ if [ -f "$S68_CLAUDE" ] \
   ok "68: CLAUDE.md ceiling qualified — unattended extends past PR-ready, old phrasing gone (#201)"
 else
   ng "68: CLAUDE.md ceiling not reconciled with SPEC §5.7.1 / unqualified phrasing remains (#201)"
+fi
+
+# ---------- 70. force-push scoping: explicit non-protected target only (#204) ----------
+# Allow force-push to an explicitly-named non-protected branch (the rebase-pull
+# tail, SPEC §13); block a protected target, and block a bare/remote-only
+# force-push (no target named) with guidance to name it. The matcher decides
+# from the COMMAND (protected token + explicit-refspec presence), never from the
+# current branch — a bare push's true destination is config-dependent, so HEAD
+# is not a safe proxy (a feature branch tracking origin/main would clobber main).
+# NOTE (#204): §69 is reserved by the parallel PR #203 (label-parent-consistency,
+# branched off the same main); numbered §70 to avoid a post-merge collision at
+# this anchor — whichever PR merges second keeps both sections.
+
+# §70a: explicit non-protected refspec → ALLOW.
+if [ "$(hook_run 'git push --force-with-lease origin my-feature')" = "0" ]; then
+  ok "70a: force-push to explicit non-protected branch allowed (#204)"
+else
+  ng "70a: force-push to explicit feature branch should be allowed (#204)"
+fi
+
+# §70b: explicit protected refspec → BLOCK, message names "protected".
+s70b=$(cd "$TMP/fake" && fake_input "Bash" "{\"command\":\"git push --force origin main\"}" \
+  | "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" 2>&1)
+s70b_rc=$?
+if [ "$s70b_rc" = 2 ] && printf '%s' "$s70b" | grep -qi protected; then
+  ok "70b: force-push to protected branch blocked; message names protected (#204)"
+else
+  ng "70b: protected force-push should block with 'protected' msg (rc=$s70b_rc) (#204)"
+fi
+
+# §70c: bare force-push (no target) → BLOCK, message guides to name the target.
+s70c=$(cd "$TMP/fake" && fake_input "Bash" "{\"command\":\"git push --force\"}" \
+  | "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" 2>&1)
+s70c_rc=$?
+if [ "$s70c_rc" = 2 ] && printf '%s' "$s70c" | grep -qi 'explicit target branch'; then
+  ok "70c: bare force-push blocked; message tells user to name the target (#204)"
+else
+  ng "70c: bare force-push should block with name-the-target guidance (rc=$s70c_rc) (#204)"
+fi
+
+# §70d: remote-only force-push (no branch named) → BLOCK (target still implicit).
+if [ "$(hook_run 'git push --force origin')" = "2" ]; then
+  ok "70d: remote-only force-push (no branch) blocked (#204)"
+else
+  ng "70d: remote-only force-push should block (no explicit target) (#204)"
 fi
 
 # ---------- restore registry ----------
