@@ -4473,101 +4473,71 @@ esac
 
 rm -rf "$PT55_DIR"
 
-# ---------- 56. /triage skill + triage-reviewer subagent (#94 / Directive #92 cluster B) ----------
-# Structural sanity: the new command file + agent file exist, carry the
-# standard frontmatter, name the right audit category, reference the right
-# triage queue labels, and document the strict-reject-+-refile semantics.
+# ---------- 56. /triage deprecation alias (#94 → deprecated by #173) ----------
+# #173 retired the triage classifier: triage-reviewer.md is deleted, /triage is
+# a one-cycle alias for /activate, SPEC §4.10/§5.18 are retirement tombstones,
+# and the `triage` audit category is retained as append-only history.
 
-# 56a: triage command file exists with standard frontmatter.
+# 56a: triage command file still exists with standard frontmatter (it's an alias).
 TRIAGE_CMD="$SHELL_ROOT/.claude/commands/triage.md"
 if [ -f "$TRIAGE_CMD" ]; then
   s56a_desc=$(awk '/^---$/{c++; next} c==1 && /^description:/{print 1; exit}' "$TRIAGE_CMD")
   s56a_hint=$(awk '/^---$/{c++; next} c==1 && /^argument-hint:/{print 1; exit}' "$TRIAGE_CMD")
   if [ "$s56a_desc" = 1 ] && [ "$s56a_hint" = 1 ]; then
-    ok "56a: /triage command file has description + argument-hint frontmatter (#94)"
+    ok "56a: /triage command file has description + argument-hint frontmatter (#94/#173)"
   else
-    ng "56a: /triage command file frontmatter incomplete (#94)"
+    ng "56a: /triage command file frontmatter incomplete (#94/#173)"
   fi
 else
-  ng "56a: /triage command file missing (#94)"
+  ng "56a: /triage command file missing (#94/#173)"
 fi
 
-# 56b: triage command names the audit category `triage`.
-if grep -q "audit_log.*triage" "$TRIAGE_CMD" 2>/dev/null; then
-  ok "56b: /triage command names audit category 'triage' (#94)"
+# 56b: /triage is a deprecation alias — delegates to /activate AND names the
+# Phase-2 raw-filing gap honestly (does not imply /activate does needs-triage
+# classification).
+if grep -qE '/activate' "$TRIAGE_CMD" 2>/dev/null \
+   && grep -qiE 'alias|deprecat' "$TRIAGE_CMD" 2>/dev/null \
+   && grep -qiE 'phase[ -]?2|needs-triage.*(phase|raw)|raw[- ]filing' "$TRIAGE_CMD" 2>/dev/null; then
+  ok "56b: /triage is a deprecation alias for /activate naming the Phase-2 gap (#173)"
 else
-  ng "56b: /triage command does not name 'triage' audit category (#94)"
+  ng "56b: /triage must be an alias delegating to /activate + naming the Phase-2 raw-filing gap (#173)"
 fi
 
-# 56c: triage command references both queue labels.
-if grep -q "needs-triage" "$TRIAGE_CMD" 2>/dev/null \
-   && grep -q "status:proposed" "$TRIAGE_CMD" 2>/dev/null; then
-  ok "56c: /triage references needs-triage + status:proposed queue labels (#94)"
+# 56c: triage-reviewer subagent file is DELETED (#173 hard-delete).
+if [ ! -f "$SHELL_ROOT/.claude/agents/triage-reviewer.md" ]; then
+  ok "56c: triage-reviewer agent file removed (#173)"
 else
-  ng "56c: /triage missing one of the queue labels (#94)"
+  ng "56c: triage-reviewer agent file should be deleted (#173)"
 fi
 
-# 56d: triage command documents strict reject + refile (no relabel).
-# Looks for: explicit refile language + an explicit "NOT" disclaimer
-# on auto-refile or relabel. The two-clause check ensures the command
-# names both halves of Decision 4 (refile YES, relabel NO).
-if grep -qE 'refile' "$TRIAGE_CMD" 2>/dev/null \
-   && grep -qE '(NOT[[:space:]]+(autonomously[[:space:]]+)?refile|no[[:space:]]+relabel|not[[:space:]]+relabel)' "$TRIAGE_CMD" 2>/dev/null; then
-  ok "56d: /triage documents strict reject+refile semantics (Decision 4) (#94)"
+# 56d: SPEC §4.10 + §5.18 are retirement tombstones (no `### ` headings → dropped from TOC).
+if ! grep -qE '^### 4\.10 ' "$SHELL_ROOT/SPEC.md" 2>/dev/null \
+   && ! grep -qE '^### 5\.18 ' "$SHELL_ROOT/SPEC.md" 2>/dev/null \
+   && grep -qE '§4\.10 .*retired' "$SHELL_ROOT/SPEC.md" 2>/dev/null \
+   && grep -qE '§5\.18 .*deprecated alias' "$SHELL_ROOT/SPEC.md" 2>/dev/null; then
+  ok "56d: SPEC §4.10/§5.18 retired to tombstones (no ### heading) (#173)"
 else
-  ng "56d: /triage missing reject+refile or NOT-auto-refile language (#94)"
+  ng "56d: SPEC §4.10/§5.18 should be retirement tombstones without ### headings (#173)"
 fi
 
-# 56e: triage-reviewer subagent file exists with frontmatter (name, description, tools).
-TRIAGE_AGENT="$SHELL_ROOT/.claude/agents/triage-reviewer.md"
-if [ -f "$TRIAGE_AGENT" ]; then
-  s56e_name=$(awk '/^---$/{c++; next} c==1 && /^name:[[:space:]]*triage-reviewer/{print 1; exit}' "$TRIAGE_AGENT")
-  s56e_desc=$(awk '/^---$/{c++; next} c==1 && /^description:/{print 1; exit}' "$TRIAGE_AGENT")
-  s56e_tools=$(awk '/^---$/{c++; next} c==1 && /^tools:/{print 1; exit}' "$TRIAGE_AGENT")
-  if [ "$s56e_name" = 1 ] && [ "$s56e_desc" = 1 ] && [ "$s56e_tools" = 1 ]; then
-    ok "56e: triage-reviewer agent frontmatter has name+description+tools (#94)"
-  else
-    ng "56e: triage-reviewer agent frontmatter incomplete (#94)"
-  fi
-else
-  ng "56e: triage-reviewer agent file missing (#94)"
-fi
-
-# 56f: triage-reviewer documents the binary verdict format (ACCEPT / REJECT).
-if grep -qE 'VERDICT:.*ACCEPT' "$TRIAGE_AGENT" 2>/dev/null \
-   && grep -qE 'VERDICT:.*REJECT' "$TRIAGE_AGENT" 2>/dev/null; then
-  ok "56f: triage-reviewer documents ACCEPT/REJECT verdict format (#94)"
-else
-  ng "56f: triage-reviewer missing ACCEPT/REJECT verdict-format documentation (#94)"
-fi
-
-# 56g: SPEC §2.1 audit-categories list names `triage`.
+# 56e: the `triage` audit category is retained in SPEC §2.1 as append-only history.
 if grep -qE '\*\*Audit categories\*\*.*\btriage\b' "$SHELL_ROOT/SPEC.md" 2>/dev/null; then
-  ok "56g: SPEC §2.1 audit-categories list names 'triage' (#94)"
+  ok "56e: SPEC §2.1 retains 'triage' audit category as history (#94/#173)"
 else
-  ng "56g: SPEC §2.1 audit-categories list missing 'triage' (#94)"
+  ng "56e: SPEC §2.1 audit-categories list missing 'triage' (#94/#173)"
 fi
 
-# 56h: SPEC §4.10 triage-reviewer section exists.
-if grep -qE '^### 4\.10 triage-reviewer' "$SHELL_ROOT/SPEC.md" 2>/dev/null; then
-  ok "56h: SPEC §4.10 triage-reviewer subsection present (#94)"
+# 56f: no live triage-reviewer references remain in source/docs. Excluded:
+# append-only .claude/state + .claude/audit (history); CHANGELOG.md (immutable
+# shipped-release history, like the directive-reviewer rename); and this smoke
+# file itself (its deprecation assertions necessarily name the retired agent).
+s56f_hits=$(cd "$SHELL_ROOT" && git grep -l 'triage-reviewer' -- . \
+  ':(exclude).claude/state' ':(exclude).claude/audit' \
+  ':(exclude)CHANGELOG.md' ':(exclude)scripts/test/smoke.sh' 2>/dev/null)
+if [ -z "$s56f_hits" ]; then
+  ok "56f: no live triage-reviewer references remain in source/docs (#173)"
 else
-  ng "56h: SPEC §4.10 triage-reviewer subsection missing (#94)"
-fi
-
-# 56i: SPEC §5.18 /triage section exists.
-if grep -qE '^### 5\.18.*triage' "$SHELL_ROOT/SPEC.md" 2>/dev/null; then
-  ok "56i: SPEC §5.18 /triage subsection present (#94)"
-else
-  ng "56i: SPEC §5.18 /triage subsection missing (#94)"
-fi
-
-# 56j: /triage command references triage-reviewer by name (composition lock).
-# Catches a future refactor that misnames or replaces the reviewer subagent.
-if grep -q "triage-reviewer" "$TRIAGE_CMD" 2>/dev/null; then
-  ok "56j: /triage references triage-reviewer subagent by name (#94)"
-else
-  ng "56j: /triage does not reference triage-reviewer (#94)"
+  ng "56f: stray triage-reviewer references remain: $(printf '%s' "$s56f_hits" | tr '\n' ' ') (#173)"
 fi
 
 # ---------- 57. issues-to-project-mirror workflow (cluster D, #96 / Directive #92) ----------
@@ -4962,12 +4932,13 @@ sp_tmp_reg=$(mktemp); grep -vxF "$S62_TARGET" "$SHELL_ROOT/.claude/state/registr
 mv "$sp_tmp_reg" "$SHELL_ROOT/.claude/state/registry.txt"
 rm -rf "$S62_DIR"
 
-# §62f: /triage names discussion stale-queue.
-if grep -q "Stale-discussion surface" "$SHELL_ROOT/.claude/commands/triage.md" \
-   && grep -q "label discussion" "$SHELL_ROOT/.claude/commands/triage.md"; then
-  ok "62f: /triage surfaces stale discussion queue (#116)"
+# §62f: stale-discussion surface lives in /activate batch mode (relocated from
+# /triage by #173, SPEC §5.19 step 2.5 → §5.12).
+if grep -q "Stale-discussion surface" "$SHELL_ROOT/.claude/commands/activate.md" \
+   && grep -q "label discussion" "$SHELL_ROOT/.claude/commands/activate.md"; then
+  ok "62f: /activate batch mode surfaces stale discussion queue (#116/#173)"
 else
-  ng "62f: /triage missing stale-discussion surface logic (#116)"
+  ng "62f: /activate missing stale-discussion surface logic (relocated from /triage, #173)"
 fi
 
 # ---------- 63. target-substrate implementation: canonical dir + /onboard-dir-mode + preflight (#118) ----------
