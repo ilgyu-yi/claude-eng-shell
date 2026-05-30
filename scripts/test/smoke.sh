@@ -1184,6 +1184,61 @@ else
   ng "skip: wrong-category tail sentinel disarmed a different matcher (rc=$rc) (#206)"
 fi
 
+# 23n (#208): SECURITY — the sentinel `#` must be a genuine UNQUOTED comment
+# token, not a `#` inside a quoted argument. A destructive command carrying the
+# sentinel text inside a quoted arg must STILL BLOCK: the executed shell runs the
+# whole command (the `#` is argument text, not a comment), so the hook must not
+# read it as an escape. Buggy pre-#208 code anchored the regex at end-of-string
+# without a comment-token check, honored it (rc=0), and disarmed the matcher with
+# a falsified audit reason.
+rc=$(hook_run 'git reset --hard "note # claude-eng:skip=destructive reason=x"')
+if [ "$rc" = "2" ]; then
+  ok "skip: sentinel inside a quoted argument is not an escape (#208)"
+else
+  ng "skip: quoted-arg sentinel wrongly disarmed a matcher (rc=$rc) (#208)"
+fi
+
+# 23o (#208): REGRESSION GUARD — a GENUINE trailing-comment sentinel that follows
+# an earlier quoted argument must still be honored. Guards against an over-strict
+# fix that rejects the sentinel whenever any quote precedes the `#`.
+before=$(audit_lines); [ -z "$before" ] && before=0
+rc=$(hook_run 'git reset --hard "safe label"  # claude-eng:skip=destructive reason=genuine')
+after=$(audit_lines); [ -z "$after" ] && after=0
+delta=$((after - before))
+if [ "$rc" = "0" ] && [ "$delta" -ge 1 ] \
+   && tail -n "$delta" "$REAL_AUDIT" 2>/dev/null | grep -q '"category":"destructive"'; then
+  ok "skip: genuine trailing-comment sentinel after a quoted arg still honored (#208)"
+else
+  ng "skip: genuine sentinel after quoted arg not honored (rc=$rc, delta=$delta) (#208)"
+fi
+
+# 23p (#208 security review): ANSI-C $(...) quoting must not reopen the bypass.
+# In `<cmd> $'x\' # claude-eng:skip=all reason=y'` the `\'` is an ESCAPED quote,
+# so bash keeps the string open and the `#` is argument text, not a comment — the
+# command runs intact and must STILL BLOCK. A naive single-quote scan would
+# mis-close at `\'` and wrongly honor the sentinel.
+rc=$(hook_run "git reset --hard \$'x\\' # claude-eng:skip=all reason=y'")
+if [ "$rc" = "2" ]; then
+  ok "skip: ANSI-C \$'...' escaped quote does not expose a sentinel (#208)"
+else
+  ng "skip: ANSI-C \$'...' sentinel wrongly honored (rc=$rc) (#208)"
+fi
+
+# 23q (#208 security review): a genuine sentinel whose `#` begins a line (after a
+# newline word-boundary) on the command's final line is honored — fixes the
+# newline false-deny. The command-scoped destructive skip then allows the line-1
+# danger (SPEC §7 command-scope), and an escape record is written.
+before=$(audit_lines); [ -z "$before" ] && before=0
+rc=$(hook_run "$(printf 'git reset --hard\n# claude-eng:skip=destructive reason=newline-boundary')")
+after=$(audit_lines); [ -z "$after" ] && after=0
+delta=$((after - before))
+if [ "$rc" = "0" ] && [ "$delta" -ge 1 ] \
+   && tail -n "$delta" "$REAL_AUDIT" 2>/dev/null | grep -q '"category":"destructive"'; then
+  ok "skip: newline-boundary sentinel on the final line is honored (#208)"
+else
+  ng "skip: newline-boundary sentinel not honored (rc=$rc, delta=$delta) (#208)"
+fi
+
 # 23l. Outvar-collision regression: passing `cmd` as outvar (the same
 # name the function uses internally for its parameter) must NOT drop
 # the stripped value. This exercises the bash dynamic-scope hazard
