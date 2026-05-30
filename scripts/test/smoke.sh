@@ -5589,6 +5589,23 @@ else
   ng "70g: case-folded protected target should block (#204)"
 fi
 
+# §70h: --mirror force-push with NO positional still blocks (the ref-set guard
+# fires regardless of token count — not dependent on the positional heuristic).
+if [ "$(hook_run 'git push --force --mirror')" = "2" ]; then
+  ok "70h: --mirror force-push (no positional) blocked (#204)"
+else
+  ng "70h: --mirror force-push must block regardless of positional count (#204)"
+fi
+
+# §70i: over-block guard — a branch literally named `all` (no `--` prefix) is a
+# normal explicit non-protected target and must be ALLOWED; the ref-set regex
+# requires the `--` flag form, so a positional `all` does not trip it.
+if [ "$(hook_run 'git push --force-with-lease origin all')" = "0" ]; then
+  ok "70i: explicit non-protected branch named 'all' allowed (no refset over-block) (#204)"
+else
+  ng "70i: branch named 'all' should be allowed (refset regex needs -- prefix) (#204)"
+fi
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"
