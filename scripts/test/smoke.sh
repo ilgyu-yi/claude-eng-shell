@@ -4802,6 +4802,10 @@ printf 'NONE\n'   > "$PT55_STATE/filer_200"   # untrusted (bare-number current r
 # repo (other/repo) #300 trusted while the current repo has no #300 (untrusted).
 printf 'OWNER\n'  > "$PT55_STATE/filer_mock_repo_100"
 printf 'OWNER\n'  > "$PT55_STATE/filer_other_repo_300"
+# Flag-form fixture (#237): foreign repo via `--repo flagco/repo` #500 trusted
+# (OWNER) while the current repo has no #500. Proves the `--repo` flag — not just
+# the URL selector — feeds the repo-aware trust lookup.
+printf 'OWNER\n'  > "$PT55_STATE/filer_flagco_repo_500"
 
 # Helper to invoke pre_tool_use.sh with a synthesized Bash command. Returns
 # the hook's exit code (0=allow, 2=block).
@@ -4986,6 +4990,36 @@ pt55_run 'gh issue close 100 --reason "not planned"' >/dev/null 2>&1
 case $? in
   2) ok "55j: trusted-filer not-planned close on a non-discussion Issue still blocks (§55 preserved) (#236)" ;;
   *) ng "55j: non-discussion trusted not-planned close wrongly allowed, got rc=$? (#236)" ;;
+esac
+
+# §55k (#237, completes #231): a foreign-repo close via the `--repo owner/name`
+# FLAG (not a URL selector) must resolve filer-trust against the flag's repo,
+# not the current repo. flagco/repo#500 is trusted (OWNER) while the current repo
+# has no #500. Pre-#237 the close arm parsed a repo only from a URL selector, so
+# the bare-number + `--repo` form left tf_repo empty → trust resolved against the
+# current repo (#500 absent → untrusted → allow): the #231-class fail-open via
+# the flag form. Clear any stale filer cache for these keys first.
+FILER_CACHE="$SHELL_ROOT/.claude/state/issue-filer-cache"
+rm -f "$FILER_CACHE/flagco__repo__500" "$FILER_CACHE/flagco__repo__600" 2>/dev/null || true
+# k1: foreign repo #500 trusted via --repo flag, close-as-not-planned → block
+# (proves the flag's repo fed the trust lookup).
+pt55_run 'gh issue close 500 --repo flagco/repo --reason "not planned"' >/dev/null 2>&1
+case $? in
+  2) ok "55k1: --repo-flag foreign close resolves trust against the flag's repo → block (#237)" ;;
+  *) ng "55k1: --repo-flag foreign close checked the wrong repo, got rc=$? (#237)" ;;
+esac
+# k2: foreign repo #600 untrusted (no fixture) via --repo flag → allow (no over-block).
+pt55_run 'gh issue close 600 --repo flagco/repo --reason "not planned"' >/dev/null 2>&1
+case $? in
+  0) ok "55k2: --repo-flag foreign close, untrusted foreign filer → allow (no over-block) (#237)" ;;
+  *) ng "55k2: --repo-flag foreign close over-blocked an untrusted filer, got rc=$? (#237)" ;;
+esac
+# k3: malformed --repo value (bare token, no owner/name) → fail soft to current
+# repo (no crash, no over-block). current #100 is trusted (filer_100) → block.
+pt55_run 'gh issue close 100 --repo badvalue --reason "not planned"' >/dev/null 2>&1
+case $? in
+  2) ok "55k3: malformed --repo value falls back to current repo (current #100 trusted → block) (#237)" ;;
+  *) ng "55k3: malformed --repo fail-soft path wrong, got rc=$? (#237)" ;;
 esac
 
 rm -rf "$PT55_DIR"
