@@ -14,8 +14,11 @@
 #   - P0 / P1 / P2 / P3 — Directive priority (#185; SPEC §0.4 tier-2 set; the P<N> label
 #                        /file-directive applies is the mirror-readable priority projection)
 #
-# Already-existing labels that v3 relies on (no creation needed):
-#   - directive, bug, enhancement, documentation, duplicate, wontfix,
+# Labels v3 relies on but that this script does NOT create (the two tier
+# type-keys are installed inline by onboard_target.sh; the rest are GitHub
+# defaults):
+#   - directive, initiative (#249) — inline in onboard_target.sh
+#   - bug, enhancement, documentation, duplicate, wontfix,
 #     unattended-parked, question, help wanted, good first issue, invalid
 #
 # Idempotent: `gh label create --force` overwrites color/description but is
