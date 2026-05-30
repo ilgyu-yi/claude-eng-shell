@@ -154,7 +154,7 @@ Set per-target with `echo unattended > .claude/state/mode`. Override per-invocat
 - Branch creation against any `status:proposed` Issue (run `/activate <N>` first) or any Directive Issue (Directives are never executable directly — spin out Execution Issues via `/file-issue --parent`). This is the `proposed-protect` hook.
 - `gh issue close` without `--reason completed` on a trusted-filer Issue; `--remove-label directive` from any filer
 
-Every block is escapable via `SKIP_HOOKS=<category> SKIP_REASON='<why>' <command>` and audit-logged at `.claude/audit/audit.jsonl`. SessionStart surfaces silent-no-op states (workspace injected but launched via plain `claude` instead of `claude-eng`, or `hookrt.sh` missing) — otherwise the hooks would evaporate without warning. See SPEC §6.1 / §6.5 / §7 for the full enforcement surface and the structural tuning mechanisms for repeated false positives.
+Every block is escapable and audit-logged at `.claude/audit/audit.jsonl`. **In the Claude Code Bash tool** use the trailing sentinel `<command>  # claude-eng:skip=<category> reason=<why>`; the leading `SKIP_HOOKS=<category> SKIP_REASON='<why>' <command>` env-prefix form works only where it arrives in the command string (a real shell, the smoke harness) — the harness otherwise consumes it as subprocess env before the hook sees it (#206). Leading wins if both are present. SessionStart surfaces silent-no-op states (workspace injected but launched via plain `claude` instead of `claude-eng`, or `hookrt.sh` missing) — otherwise the hooks would evaporate without warning. See SPEC §6.1 / §6.5 / §7 for the full enforcement surface and the structural tuning mechanisms for repeated false positives.
 
 ## Subagents
 
