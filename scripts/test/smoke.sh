@@ -1016,10 +1016,17 @@ else
   ng "matcher: git -p commit bypasses commit-format (#37)"
 fi
 
-# ---------- 23. SKIP_HOOKS env-prefix parsing (#38) ----------
-# SPEC §7 documents the escape hatch as a leading env-prefix on the
-# command. Claude Code's hook subprocess does not inherit env-prefixes
-# from the command string; the hook must parse them itself.
+# ---------- 23. SKIP_HOOKS escape parsing (#38, #206) ----------
+# SPEC §7 escape has TWO forms. §23a-f cover the LEADING env-prefix form,
+# which only works where the prefix arrives INSIDE the command string —
+# hook_run embeds it in tool_input.command via `jq -Rs`, modeling a real
+# shell / verbatim delivery. CAVEAT (#206): the LIVE Claude Code Bash tool
+# consumes a leading `VAR=val` as the subprocess env, so it never reaches
+# tool_input.command — the leading form is dead in-harness. §23g-k (below)
+# cover the TRAILING sentinel `# claude-eng:skip=<cat> reason=<why>`, which
+# stays in the command and IS the reliable in-harness escape (incl. §23k: a
+# line-1 sentinel must not strip/bypass a later-line command). §23l is the
+# pre-existing parse_env_prefix outvar-collision guard.
 
 # Helper: count audit lines + the last N entries.
 audit_lines() { wc -l < "$REAL_AUDIT" 2>/dev/null | tr -d ' '; }
@@ -1102,7 +1109,82 @@ else
 fi
 rm -rf "$PATH_PROBE_DIR"
 
-# 23g. Outvar-collision regression: passing `cmd` as outvar (the same
+# 23g (#206): TRAILING SENTINEL — the in-harness escape. A `git reset --hard`
+# (destructive) blocks today; with a trailing `# claude-eng:skip=destructive
+# reason=...` sentinel IN the command (which is how it arrives in-harness AND
+# in hook_run) it is allowed + an escape audit record is written.
+before=$(audit_lines); [ -z "$before" ] && before=0
+rc=$(hook_run 'git reset --hard  # claude-eng:skip=destructive reason=in-harness-escape')
+after=$(audit_lines); [ -z "$after" ] && after=0
+delta=$((after - before))
+if [ "$rc" = "0" ] && [ "$delta" -ge 1 ] \
+   && tail -n "$delta" "$REAL_AUDIT" 2>/dev/null | grep -q '"category":"destructive"' \
+   && tail -n "$delta" "$REAL_AUDIT" 2>/dev/null | grep -q '"event":"escape"'; then
+  ok "skip: trailing sentinel honored + audited in-harness (#206)"
+else
+  ng "skip: trailing sentinel not honored (rc=$rc, delta=$delta) (#206)"
+fi
+
+# 23h (#206): REGRESSION proving the gap — a bare command with NO sentinel
+# (modeling what the harness delivers after eating a leading env-prefix) still
+# BLOCKS. This is exactly the in-harness failure #206 fixes: a user who typed
+# `SKIP_HOOKS=destructive ... git reset --hard` gets the prefix stripped, so the
+# hook sees only the bare command. The sentinel (§23g) is the working path.
+rc=$(hook_run 'git reset --hard')
+if [ "$rc" = "2" ]; then
+  ok "skip: bare command (harness-stripped leading prefix) still blocks (#206)"
+else
+  ng "skip: bare command should block (rc=$rc) (#206)"
+fi
+
+# 23i (#206): the sentinel + its reason text are STRIPPED before the matcher
+# pass, so a reason containing a blockable substring cannot bleed into another
+# matcher. Skip=destructive with a reason that mentions a force-push: only the
+# destructive matcher should be considered (and skipped) — the force-push
+# matcher must not fire on the stripped reason text.
+rc=$(hook_run 'git reset --hard  # claude-eng:skip=destructive reason=mentions git push --force origin main')
+if [ "$rc" = "0" ]; then
+  ok "skip: sentinel reason text does not bleed into other matchers (#206)"
+else
+  ng "skip: sentinel reason bled into a matcher (rc=$rc) (#206)"
+fi
+
+# 23j (#206): a plain (non-namespaced) trailing comment is NOT an escape — the
+# sentinel must carry the `claude-eng:skip=` namespace, else a normal comment
+# could silently disable a guardrail.
+rc=$(hook_run 'git reset --hard  # just a normal comment, not an escape')
+if [ "$rc" = "2" ]; then
+  ok "skip: plain trailing comment is not treated as an escape (#206)"
+else
+  ng "skip: plain comment wrongly skipped a matcher (rc=$rc) (#206)"
+fi
+
+# 23k (#206): SECURITY — a line-1 sentinel must NOT skip a dangerous command on
+# a LATER line. bash `[[ =~ ]]` matches newlines, so a naive newline-spanning
+# regex would let `echo ok # claude-eng:skip=destructive reason=x\n<danger>`
+# greedily capture+strip the danger line before matchers, executing it under a
+# falsified audit category. The single-trailing-line sentinel must reject this
+# (no escape) → the command falls through to the matcher and BLOCKS.
+rc=$(hook_run "$(printf 'echo ok  # claude-eng:skip=destructive reason=probe\ngit reset --hard')")
+if [ "$rc" = "2" ]; then
+  ok "skip: line-1 sentinel does not strip/bypass a later-line command (#206)"
+else
+  ng "skip: multi-line sentinel bypassed a later-line matcher (rc=$rc) (#206)"
+fi
+
+# 23m (#206): category-scoping bounds the command-scope of a tail sentinel — a
+# last-line sentinel naming category X (out-of-scope) does NOT disarm an
+# earlier-line danger of category Y (destructive). The destructive matcher still
+# fires → BLOCK. (Documents/locks the SPEC §7 "category-scoped" guarantee that
+# bounds the last-line-disarms-command behavior to the NAMED category only.)
+rc=$(hook_run "$(printf 'git reset --hard\necho ok  # claude-eng:skip=out-of-scope reason=wrong-category')")
+if [ "$rc" = "2" ]; then
+  ok "skip: tail sentinel for category X does not disarm a category-Y danger (#206)"
+else
+  ng "skip: wrong-category tail sentinel disarmed a different matcher (rc=$rc) (#206)"
+fi
+
+# 23l. Outvar-collision regression: passing `cmd` as outvar (the same
 # name the function uses internally for its parameter) must NOT drop
 # the stripped value. This exercises the bash dynamic-scope hazard
 # the helper's internals avoid via the _pep_ prefix.

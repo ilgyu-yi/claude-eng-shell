@@ -87,3 +87,43 @@ print(json.dumps({"env": env, "cmd": rest}))
   done <<< "$_pep_env_lines"
   printf -v "$_pep_outvar" '%s' "$_pep_stripped"
 }
+
+# parse_skip_sentinel <raw_cmd> <outvar> — TRAILING-sentinel escape (SPEC §7,
+# #206). Recognizes `# claude-eng:skip=<cat>[,<cat>...] reason=<why>` at the tail
+# of the RAW command and, on match, exports SKIP_HOOKS / SKIP_REASON (mirroring
+# parse_env_prefix's contract so every matcher's `should_skip` works unchanged)
+# and writes the sentinel-stripped command to <outvar>. No-op (outvar = input,
+# no exports) when absent.
+#
+# This is the form that survives the live Claude Code Bash tool: the harness
+# consumes a leading `VAR=val` env-prefix as the spawned subprocess's own
+# environment, so it never reaches `tool_input.command` (parse_env_prefix then
+# has nothing to read) — but a trailing `#`-comment stays inside the command and
+# is ignored by the executed shell. MUST be called on the RAW command BEFORE the
+# hook's whitespace-normalization + shlex pass, which would quote/mangle the `#`.
+# The `claude-eng:skip=` namespace keeps an ordinary trailing comment from being
+# read as an escape; the sentinel is one-shot (it travels with the single
+# command — no persistent bypass state). All `[A-Za-z0-9,_-]` category chars
+# only; the reason is captured verbatim and JSON-encoded by audit_log downstream.
+parse_skip_sentinel() {
+  local _pss_in="$1" _pss_outvar="$2"
+  # SINGLE TRAILING LINE only. `[[:blank:]]` (space/tab, NOT newline) and a
+  # control-char-free reason (`[^[:cntrl:]]`, excludes newline) keep the match
+  # confined to the command's final line — anchored at end-of-string. This is
+  # load-bearing for security: bash `[[ =~ ]]` lets `.`/`[[:space:]]` match a
+  # newline, so a newline-spanning regex would let a line-1 sentinel greedily
+  # capture+strip a dangerous later line (e.g. `echo ok  # claude-eng:skip=x
+  # reason=y\ngit push --force origin main`) before any matcher sees it, while
+  # the shell still runs it — a silent, category-agnostic bypass with a
+  # falsified audit category. The trailing newline guard below is belt-and-
+  # suspenders against that.
+  local _pss_re='[[:blank:]]*#[[:blank:]]*claude-eng:skip=([A-Za-z0-9,_-]+)([[:blank:]]+reason=([^[:cntrl:]]*))?[[:blank:]]*$'
+  if [[ "$_pss_in" =~ $_pss_re ]] && [[ "${BASH_REMATCH[0]}" != *$'\n'* ]]; then
+    export SKIP_HOOKS="${BASH_REMATCH[1]}"
+    local _pss_reason="${BASH_REMATCH[3]:-}"
+    export SKIP_REASON="${_pss_reason:-unspecified}"
+    printf -v "$_pss_outvar" '%s' "${_pss_in%"${BASH_REMATCH[0]}"}"
+  else
+    printf -v "$_pss_outvar" '%s' "$_pss_in"
+  fi
+}
