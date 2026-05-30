@@ -6172,6 +6172,20 @@ else
   ng "67a: activation-reviewer parent-fit not gated by type label / matrix not execution-scoped (#197)"
 fi
 
+# §67e (#254, M2) — activation-reviewer handles the Initiative tier: type dispatch
+# recognizes `initiative`, the Directive alignment branches on parent kind, and the
+# Initiative rulebook documents contract-evaluability + extraction-faithfulness.
+if [ -f "$S67_AR" ] \
+   && grep -qF 'label present → Initiative rulebook' "$S67_AR" \
+   && grep -qF '## Initiative rulebook' "$S67_AR" \
+   && grep -qF 'Parent-kind alignment' "$S67_AR" \
+   && grep -qF 'Contract-evaluability' "$S67_AR" \
+   && grep -qF 'Extraction-faithfulness' "$S67_AR"; then
+  ok "67f: activation-reviewer has Initiative dispatch + parent-kind alignment + contract/extraction checks (#254)"
+else
+  ng "67f: activation-reviewer missing Initiative-tier branching/checks (#254)"
+fi
+
 # §67b — the inverse smell: a Parent marker on a task/bug is a relabel-or-drop
 # type smell, not a parent problem.
 if [ -f "$S67_AR" ] \
