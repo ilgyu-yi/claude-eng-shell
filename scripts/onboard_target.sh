@@ -7,7 +7,7 @@
 #
 # Tier semantics (SPEC §1.7 Substrate-in-target contract):
 #   1 — no-op (eng-mode only; no substrate installed).
-#   2 — labels: the 12-label v3 set via `gh label create --force`.
+#   2 — labels: the 13-label v3 set via `gh label create --force`.
 #   3 — tier 2 + ISSUE_TEMPLATE + workflows (via PR) + Project v2.
 
 set -euo pipefail
@@ -84,7 +84,7 @@ fi
 # artifact type). Plus extra labels not in ensure_v3_labels.sh: directive,
 # P0/P1/P2/P3 — installed inline since those labels are not the v3-bootstrap
 # scope of ensure_v3_labels.sh.
-echo "onboard_target: tier 2 — installing 12-label v3 set..."
+echo "onboard_target: tier 2 — installing 13-label v3 set..."
 
 ensure_label() {
   local name="$1" color="$2" desc="$3"
@@ -115,14 +115,16 @@ else
   bash "$CLAUDE_ENG_SHELL_ROOT/scripts/ensure_v3_labels.sh" 2>&1 | sed 's/^/  /'
 fi
 
-# Additional label not in ensure_v3_labels.sh (P0-P3 moved into the canonical
-# set by #185; only `directive` remains inline here).
+# Additional labels not in ensure_v3_labels.sh (P0-P3 moved into the canonical
+# set by #185; the two tier type-keys `directive` and `initiative` remain inline
+# here — #249).
 ensure_label "directive" "0E8A16" "Directive Issue (dir-mode, SPEC §1.7)"
+ensure_label "initiative" "0052CC" "Initiative: planning-tier strategic commitment consumed from upstream (dir-mode, SPEC §1.7)"
 
-echo "onboard_target: tier 2 labels done (12 total: 11 from ensure_v3_labels.sh + 1 inline: directive)."
+echo "onboard_target: tier 2 labels done (13 total: 11 from ensure_v3_labels.sh + 2 inline: directive, initiative)."
 
 if [ "$TIER" = 2 ]; then
-  audit_log info onboard-dir-mode created "target=$TARGET_OWNER_REPO tier=2 labels=12"
+  audit_log info onboard-dir-mode created "target=$TARGET_OWNER_REPO tier=2 labels=13"
   exit 0
 fi
 

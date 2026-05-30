@@ -8,6 +8,9 @@
 #   is_directive_issue <issue#>
 #     rc 0 → Type=Directive (the issue carries the `directive` label).
 #     rc 1 → Type=Execution (no `directive` label) OR unresolvable.
+#   is_initiative_issue <issue#>  (#249)
+#     rc 0 → Type=Initiative (the issue carries the `initiative` label).
+#     rc 1 → not an Initiative (no `initiative` label) OR unresolvable.
 #   is_proposed_issue <issue#>
 #     rc 0 → the issue carries the `status:proposed` label.
 #     rc 1 → no `status:proposed` label OR unresolvable.
@@ -16,7 +19,11 @@
 # per-session at
 #   $CLAUDE_ENG_SHELL_ROOT/.claude/state/issue-type-cache/<owner>__<repo>__<n>
 # because the `directive` label is effectively immutable for a Directive's life
-# (the trusted-filer-mutate declassify guard enforces this). `is_proposed_issue`
+# (the trusted-filer-mutate declassify guard enforces this). `is_initiative_issue`
+# (#249) caches the same way — the `initiative` label is likewise stable (the
+# read-only-except-comments invariant, M1.2, protects it) — but in a SEPARATE
+# cache file (`…__<n>.initiative`) so the two type predicates never clobber each
+# other's sentinel on a shared key. `is_proposed_issue`
 # does NOT cache: the `status:proposed` label is volatile — `/activate` removes
 # it — and a stale `proposed` cache entry would keep a just-activated Issue
 # blocked by `proposed-protect` until session restart. The cost is one extra
@@ -65,6 +72,51 @@ is_directive_issue() {
     return 0
   else
     printf 'execution\n' > "$cache_file" 2>/dev/null || true
+    return 1
+  fi
+}
+
+# is_initiative_issue <issue#> — rc 0 if the issue carries the `initiative`
+# label (Type=Initiative, the planning tier above a Directive, SPEC §1.7), rc 1
+# otherwise OR unresolvable. Symmetric to is_directive_issue; caches in a SEPARATE
+# file (`…__<n>.initiative`) with its own sentinels so it never clobbers / is
+# clobbered by the directive/execution cache on a shared key (#249).
+is_initiative_issue() {
+  local issue="$1"
+  case "$issue" in
+    ''|*[!0-9]*) return 1 ;;  # not a number → not an initiative issue
+  esac
+
+  : "${CLAUDE_ENG_SHELL_ROOT:?CLAUDE_ENG_SHELL_ROOT must be set}"
+
+  local cache_dir cache_file
+  cache_dir="$CLAUDE_ENG_SHELL_ROOT/.claude/state/issue-type-cache"
+  local owner name
+  owner=$(gh repo view --json owner -q .owner.login 2>/dev/null) || return 1
+  name=$(gh repo view --json name -q .name 2>/dev/null) || return 1
+  cache_file="$cache_dir/${owner}__${name}__${issue}.initiative"
+
+  if [ -f "$cache_file" ]; then
+    local cached
+    cached=$(cat "$cache_file" 2>/dev/null) || true
+    case "$cached" in
+      initiative) return 0 ;;
+      not-initiative) return 1 ;;
+      # any other value → fall through to refetch
+    esac
+  fi
+
+  local labels
+  labels=$(gh issue view "$issue" --json labels -q '[.labels[].name] | join(",")' 2>/dev/null) || return 1
+
+  mkdir -p "$cache_dir" 2>/dev/null || true
+  # Comma-list boundary match (mirrors is_directive_issue; NOT a grep word-match,
+  # so `initiative-foo` does not over-match).
+  if printf '%s' "$labels" | grep -qiE '(^|,)initiative(,|$)'; then
+    printf 'initiative\n' > "$cache_file" 2>/dev/null || true
+    return 0
+  else
+    printf 'not-initiative\n' > "$cache_file" 2>/dev/null || true
     return 1
   fi
 }
@@ -119,6 +171,34 @@ issue_has_parent_marker() {
   body=$(gh issue view "$issue" --json body -q .body 2>/dev/null) || return 2
   first_line=$(printf '%s\n' "$body" | head -1 || true)
   if printf '%s' "$first_line" | grep -qE '^Parent Directive: #[0-9]+$'; then
+    return 0
+  fi
+  return 1
+}
+
+# issue_has_initiative_parent_marker <issue#> — TRI-STATE resolver for the line-1
+# `Parent Initiative: #N` marker that parents a *Directive* under an Initiative
+# (#249). DISTINCT from issue_has_parent_marker (which resolves the
+# `Parent Directive: #N` marker that parents an *Execution Issue* under a
+# Directive): the two markers sit on different artifact types, so a
+# `Parent Directive` line is NOT an initiative-parent marker (returns rc 1 here).
+# Generalizing the existing resolver would have let an `execution`-labelled Issue
+# parented to an Initiative pass label-parent-consistency — hence a separate
+# predicate. Same tri-state contract (0 present / 1 absent / 2 unresolvable) and
+# UNCACHED rationale as issue_has_parent_marker.
+#   rc 0 → marker present (body line 1 matches `^Parent Initiative: #[0-9]+$`)
+#   rc 1 → resolved, marker ABSENT
+#   rc 2 → unresolvable (not a number / gh failure / no auth / issue not found)
+issue_has_initiative_parent_marker() {
+  local issue="$1"
+  case "$issue" in
+    ''|*[!0-9]*) return 2 ;;  # not a number → cannot resolve → fail open
+  esac
+
+  local body="" first_line=""
+  body=$(gh issue view "$issue" --json body -q .body 2>/dev/null) || return 2
+  first_line=$(printf '%s\n' "$body" | head -1 || true)
+  if printf '%s' "$first_line" | grep -qE '^Parent Initiative: #[0-9]+$'; then
     return 0
   fi
   return 1
