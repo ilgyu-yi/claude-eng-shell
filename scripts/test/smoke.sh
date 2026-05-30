@@ -1172,6 +1172,18 @@ else
   ng "skip: multi-line sentinel bypassed a later-line matcher (rc=$rc) (#206)"
 fi
 
+# 23m (#206): category-scoping bounds the command-scope of a tail sentinel — a
+# last-line sentinel naming category X (out-of-scope) does NOT disarm an
+# earlier-line danger of category Y (destructive). The destructive matcher still
+# fires → BLOCK. (Documents/locks the SPEC §7 "category-scoped" guarantee that
+# bounds the last-line-disarms-command behavior to the NAMED category only.)
+rc=$(hook_run "$(printf 'git reset --hard\necho ok  # claude-eng:skip=out-of-scope reason=wrong-category')")
+if [ "$rc" = "2" ]; then
+  ok "skip: tail sentinel for category X does not disarm a category-Y danger (#206)"
+else
+  ng "skip: wrong-category tail sentinel disarmed a different matcher (rc=$rc) (#206)"
+fi
+
 # 23l. Outvar-collision regression: passing `cmd` as outvar (the same
 # name the function uses internally for its parameter) must NOT drop
 # the stripped value. This exercises the bash dynamic-scope hazard
