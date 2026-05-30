@@ -22,8 +22,11 @@
 #   - missing MISSION.md (must be populated before running)
 #   - --confirm flag absent (destructive operation — explicit opt-in)
 #
-# Idempotent on snapshot: re-running with the same date does nothing if
-# the snapshot dir is already populated AND all Items already deleted.
+# Snapshot is NOT idempotent: the timestamp resolves to the second
+# (date -u +%Y%m%dT%H%M%SZ), so each run writes a fresh snapshot dir.
+# Idempotency holds only on the Item deletion (a re-run finds the Items
+# already deleted). migrate_v3 is a spent one-shot — the v3 cutover
+# completed inline — so a redundant snapshot dir on a re-run is harmless. (#218)
 
 set -euo pipefail
 
