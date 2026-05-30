@@ -373,6 +373,63 @@ case "$tool" in
       [ -z "$decided" ] && pass_through_trace trusted-filer-mutate "$cmd"
     fi
 
+    # label-parent-consistency — block `gh issue edit <N> --add-label
+    # {execution|task|bug}` when the label contradicts the Issue body's line-1
+    # `Parent Directive: #N` marker (SPEC §6.1, Issue #199). Converts the
+    # advisory #197 reviewer/skill layer into runtime enforcement — fires
+    # regardless of which agent/path applies the label.
+    #   - `execution` with NO marker → block (execution Issues require a parent,
+    #     SPEC §1.7:309).
+    #   - `task`/`bug` WITH a marker present → block (standalone types must not
+    #     be parented; the marker is a relabel-or-drop type smell).
+    # Scoped to the --add-label edit path only; the `gh issue create` path is
+    # already label↔marker-consistent via /file-issue (post-#197).
+    # issue_has_parent_marker is TRI-STATE (0=present, 1=resolved-absent,
+    # 2=unresolvable). The block fires only on a positively-resolved
+    # contradiction; an unresolvable body (rc 2) or an undefined predicate
+    # fails open per SPEC §6.1 (parity with proposed-protect / trusted-filer-mutate).
+    if printf '%s' "$cmd" | grep -qE '\bgh[[:space:]]+issue[[:space:]]+edit[[:space:]]+[0-9]+\b.*--add-label\b'; then
+      decided=
+      if should_skip label-parent-consistency; then
+        decided=1
+      else
+        lpc_issue=
+        if [[ "$cmd" =~ gh[[:space:]]+issue[[:space:]]+edit[[:space:]]+([0-9]+) ]]; then
+          lpc_issue="${BASH_REMATCH[1]}"
+        fi
+        # Which gated type label is being added? Only execution/task/bug are
+        # gated; accept space- or =-separated, optionally quoted, full-token.
+        lpc_label=
+        lpc_label_re='--add-label[=[:space:]]+["'"'"']?(execution|task|bug)([^a-z]|$)'
+        if [[ "$cmd" =~ $lpc_label_re ]]; then
+          lpc_label="${BASH_REMATCH[1]}"
+        fi
+        if [ -z "$lpc_label" ] || [ -z "$lpc_issue" ] \
+           || ! command -v issue_has_parent_marker >/dev/null 2>&1; then
+          # Not a gated label / no issue number / predicate unavailable → fail open.
+          mark_allow label-parent-consistency
+          decided=1
+        else
+          issue_has_parent_marker "$lpc_issue"
+          lpc_rc=$?
+          if [ "$lpc_rc" = 2 ]; then
+            # Unresolvable body (gh down / no auth / not found) → fail open.
+            mark_allow label-parent-consistency
+            decided=1
+          elif [ "$lpc_label" = execution ] && [ "$lpc_rc" = 1 ]; then
+            block label-parent-consistency "Issue #${lpc_issue}: --add-label execution needs a 'Parent Directive: #N' marker on body line 1 — an execution Issue is parented under a Directive (SPEC §1.7). Set the marker first (/link-directive ${lpc_issue} <directive-#>), then relabel; or use --add-label task for standalone work. Or SKIP_HOOKS=label-parent-consistency SKIP_REASON='<why>' for a legitimate two-step edit."
+          elif { [ "$lpc_label" = task ] || [ "$lpc_label" = bug ]; } && [ "$lpc_rc" = 0 ]; then
+            block label-parent-consistency "Issue #${lpc_issue}: --add-label ${lpc_label} contradicts the 'Parent Directive: #N' marker on body line 1 — task/bug are standalone and must not be parented. Relabel execution, or drop the parent marker. Or SKIP_HOOKS=label-parent-consistency SKIP_REASON='<why>' for a legitimate edge case."
+          else
+            # Consistent (execution+marker, or task/bug+no-marker) → allow.
+            mark_allow label-parent-consistency
+            decided=1
+          fi
+        fi
+      fi
+      [ -z "$decided" ] && pass_through_trace label-parent-consistency "$cmd"
+    fi
+
     # Force push — scoped to protected targets, with an explicit-target
     # requirement (#204). Force-push to a non-protected branch is the normal
     # rebase-pull tail (SPEC §13) and is allowed — but ONLY when the target
