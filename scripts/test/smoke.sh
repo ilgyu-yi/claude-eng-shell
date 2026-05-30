@@ -4087,6 +4087,90 @@ s212_isdir() {  # $1=labels → echoes directive|execution
   && ok "44i: comma list without 'directive' is execution (#212)" \
   || ng "44i: non-directive comma list mis-classified (#212)"
 
+# 44j (#249): is_initiative_issue keys on the `initiative` label, symmetric to
+# is_directive_issue. Self-contained function-mock (mirrors 44i's s212_isdir).
+m1_pred() {  # $1=labels $2=predicate-fn → echoes YES|NO
+  (
+    export CLAUDE_ENG_SHELL_ROOT="$TMP/m1root"
+    rm -rf "$CLAUDE_ENG_SHELL_ROOT/.claude/state/issue-type-cache" 2>/dev/null
+    mkdir -p "$CLAUDE_ENG_SHELL_ROOT/.claude/state"
+    m1_lbl="$1"
+    gh() {
+      case "$*" in
+        *'repo view'*owner*) printf 'smoke-owner\n' ;;
+        *'repo view'*name*) printf 'smoke-repo\n' ;;
+        *'issue view'*) printf '%s\n' "$m1_lbl" ;;
+        *) return 0 ;;
+      esac
+    }
+    . "$SHELL_ROOT/.claude/hooks/helpers/issue_type.sh"
+    "$2" 700 && echo YES || echo NO
+  )
+}
+[ "$(m1_pred 'initiative' is_initiative_issue)" = YES ] \
+  && ok "44j: is_initiative_issue true on initiative label (#249)" \
+  || ng "44j: is_initiative_issue missed initiative label (#249)"
+[ "$(m1_pred 'task' is_initiative_issue)" = NO ] \
+  && ok "44j: is_initiative_issue false on non-initiative label (#249)" \
+  || ng "44j: is_initiative_issue mis-fired on task (#249)"
+[ "$(m1_pred 'initiative-foo' is_initiative_issue)" = NO ] \
+  && ok "44j: is_initiative_issue does not over-match 'initiative-foo' (#249)" \
+  || ng "44j: is_initiative_issue over-matched 'initiative-foo' (#249)"
+
+# 44k (#249): the two type predicates resolve INDEPENDENTLY (no cache collision /
+# no cross-classification) — directive→directive-yes/initiative-no, and vice-versa.
+[ "$(m1_pred 'directive' is_directive_issue)" = YES ] && [ "$(m1_pred 'directive' is_initiative_issue)" = NO ] \
+  && ok "44k: directive label → is_directive yes, is_initiative no (#249)" \
+  || ng "44k: directive label cross-classified (#249)"
+[ "$(m1_pred 'initiative' is_initiative_issue)" = YES ] && [ "$(m1_pred 'initiative' is_directive_issue)" = NO ] \
+  && ok "44k: initiative label → is_initiative yes, is_directive no (#249)" \
+  || ng "44k: initiative label cross-classified (#249)"
+
+# 44l (#249): is_initiative_issue fails open (gh unavailable → not-initiative).
+m1_failopen() {
+  ( export CLAUDE_ENG_SHELL_ROOT="$TMP/m1root2"; mkdir -p "$CLAUDE_ENG_SHELL_ROOT/.claude/state"
+    gh() { return 1; }
+    . "$SHELL_ROOT/.claude/hooks/helpers/issue_type.sh"
+    is_initiative_issue 700 && echo YES || echo NO )
+}
+[ "$(m1_failopen)" = NO ] \
+  && ok "44l: is_initiative_issue fails open (gh down → not-initiative) (#249)" \
+  || ng "44l: is_initiative_issue fail-open regression (#249)"
+
+# 44m (#249): issue_has_initiative_parent_marker — tri-state on the line-1
+# `Parent Initiative: #N` marker. Distinct from the Parent Directive resolver
+# (a Parent Directive line is NOT an initiative marker → rc 1).
+m1_marker() {  # $1=body → echoes rc
+  ( export CLAUDE_ENG_SHELL_ROOT="$TMP/m1root3"; mkdir -p "$CLAUDE_ENG_SHELL_ROOT/.claude/state"
+    m1_body="$1"
+    gh() {
+      case "$*" in
+        *'issue view'*'--json body'*) printf '%s\n' "$m1_body" ;;
+        *) return 0 ;;
+      esac
+    }
+    . "$SHELL_ROOT/.claude/hooks/helpers/issue_type.sh"
+    issue_has_initiative_parent_marker 700; echo $? )
+}
+[ "$(m1_marker 'Parent Initiative: #42')" = 0 ] \
+  && ok "44m: line-1 'Parent Initiative: #N' recognized (rc 0) (#249)" \
+  || ng "44m: initiative parent marker not recognized (#249)"
+[ "$(m1_marker 'Parent Directive: #42')" = 1 ] \
+  && ok "44m: 'Parent Directive' is NOT an initiative marker (rc 1) (#249)" \
+  || ng "44m: Parent Directive mis-read as initiative marker (#249)"
+[ "$(m1_marker 'Some other first line')" = 1 ] \
+  && ok "44m: absent initiative marker → rc 1 (#249)" \
+  || ng "44m: absent-marker rc wrong (#249)"
+m1_marker_fail() {
+  ( export CLAUDE_ENG_SHELL_ROOT="$TMP/m1root4"; mkdir -p "$CLAUDE_ENG_SHELL_ROOT/.claude/state"
+    gh() { return 1; }
+    . "$SHELL_ROOT/.claude/hooks/helpers/issue_type.sh"
+    issue_has_initiative_parent_marker 700; echo $? )
+}
+[ "$(m1_marker_fail)" = 2 ] \
+  && ok "44m: marker resolver unresolvable → rc 2 (fail-open) (#249)" \
+  || ng "44m: marker fail-open rc wrong (#249)"
+
 # Cleanup: remove cache entries created by §44 so they don't leak.
 rm -f "$DP_CACHE/smoke-owner__smoke-repo__91" "$DP_CACHE/smoke-owner__smoke-repo__92" "$DP_CACHE/smoke-owner__smoke-repo__93" "$DP_CACHE/smoke-owner__smoke-repo__94" "$DP_CACHE/smoke-owner__smoke-repo__95"
 # Remove the test target from the registry so other tests aren't affected.
@@ -5719,14 +5803,14 @@ fi
 # exercise label parsing; §63g closes the gap.
 s63g_out=$("$SHELL_ROOT/scripts/onboard_target.sh" --tier 2 --dry-run 2>&1 || true)
 s63g_ok=1
-for required in "status:proposed" "status:blocked" "awaiting-author" "execution" "discussion" "task" "skip-changelog" "P0" "P1" "P2" "P3"; do
+for required in "status:proposed" "status:blocked" "awaiting-author" "execution" "discussion" "task" "skip-changelog" "P0" "P1" "P2" "P3" "directive" "initiative"; do
   if ! printf '%s' "$s63g_out" | grep -qE "gh label create '$required'"; then
     s63g_ok=0
     break
   fi
 done
 if [ "$s63g_ok" = 1 ]; then
-  ok "63g: onboard_target --tier 2 --dry-run emits gh label create for all v3-bootstrap labels including status:proposed + status:blocked + skip-changelog (#118 + #133)"
+  ok "63g: onboard_target --tier 2 --dry-run emits gh label create for all 13 dir-mode labels incl. the inline directive + initiative type-keys (#118 + #133 + #249)"
 else
   ng "63g: onboard_target --tier 2 --dry-run missing one or more required labels (regression-guard for label-parser drift) (#118 + #133)"
 fi
