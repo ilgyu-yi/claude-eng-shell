@@ -124,30 +124,49 @@ parse_skip_sentinel() {
     *'claude-eng:skip='*) : ;;
     *) printf -v "$_pss_outvar" '%s' "$_pss_in"; return ;;
   esac
-  # Comment-token guard: emit the comment suffix (from the last UNQUOTED `#`
+  # Comment-token guard: emit the comment suffix (from the first UNQUOTED `#`
   # boundary token to end of string) iff one exists; empty otherwise. A small
-  # quote/escape state machine — `chr()` literals avoid embedding `'`/`"`/`#`/`\`
-  # in this single-quoted python source.
+  # quote/escape state machine that models all three bash string forms —
+  # double `"…"`, literal single `'…'`, and ANSI-C `$'…'` (where `\'` is an
+  # escaped quote, so a naive single-quote scan would mis-close it and expose a
+  # `$'x\' #sentinel'` bypass — #208 security review). A `#` is a comment only at
+  # a word boundary (start of string, or after space/tab/newline). `chr()`
+  # literals avoid embedding `'`/`"`/`#`/`\` in this single-quoted python source.
   local _pss_comment=""
   if command -v python3 >/dev/null 2>&1; then
     _pss_comment=$(printf '%s' "$_pss_in" | python3 -c '
 import sys
 s = sys.stdin.read()
-DQ = chr(34); SQ = chr(39); BS = chr(92); HS = chr(35); SP = chr(32); TB = chr(9)
+DQ = chr(34); SQ = chr(39); BS = chr(92); HS = chr(35)
+SP = chr(32); TB = chr(9); NL = chr(10); DOL = chr(36); AN = chr(1)
 i = 0; n = len(s); q = None; off = -1
 while i < n:
     c = s[i]
-    if q is not None:
-        if c == BS and q == DQ:
-            i += 2; continue
-        if c == q:
-            q = None
-    else:
+    if q == AN:
+        # ANSI-C $(...) string: backslash escapes next; closes at unescaped quote.
         if c == BS:
             i += 2; continue
-        if c == DQ or c == SQ:
-            q = c
-        elif c == HS and (i == 0 or s[i-1] == SP or s[i-1] == TB):
+        if c == SQ:
+            q = None
+    elif q == DQ:
+        if c == BS:
+            i += 2; continue
+        if c == DQ:
+            q = None
+    elif q == SQ:
+        # literal single quotes: no escapes, closes only at the next quote.
+        if c == SQ:
+            q = None
+    else:
+        if c == DOL and i + 1 < n and s[i+1] == SQ:
+            q = AN; i += 2; continue
+        if c == BS:
+            i += 2; continue
+        if c == DQ:
+            q = DQ
+        elif c == SQ:
+            q = SQ
+        elif c == HS and (i == 0 or s[i-1] == SP or s[i-1] == TB or s[i-1] == NL):
             off = i; break
     i += 1
 if off >= 0:
