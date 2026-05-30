@@ -56,7 +56,7 @@ Don't re-run an exploration in `explorer` that the main assistant already did.
 
 ## What hooks enforce
 - Protected branch direct commit/push blocked
-- force push, `--amend` (after push), `--no-verify` blocked
+- force push allowed **only to an explicitly-named non-protected branch** (`git push --force-with-lease origin <branch>` — the rebase-pull tail, SPEC §13); a force-push naming a protected branch, OR a **bare/remote-only force-push** (no target named), is blocked — the bare form's true target isn't verifiable (it's config-dependent), so the block message tells you to name the branch. `--amend` (after push) and `--no-verify` blocked
 - Secret patterns in staged diff blocked; hits emit `file:line: <id>` for navigation. Path allow-list via `.shellsecretignore` at the target repo root (gitignore-narrow; defaults skip `*test*`, `*example*`, `docs/`, `*.md`)
 - `gh pr merge` blocked when a linked issue (via `closingIssuesReferences`) has unchecked AC items and no `^## AC closeout` marker comment yet. Run `scripts/ac_closeout.sh <pr-num>` to satisfy (idempotent — `/ship` step 7.6 invokes it automatically). Escape: `SKIP_HOOKS=ac-closeout SKIP_REASON='<why>'`.
 - Edits to `.env`, `*.pem`, `credentials*` blocked
