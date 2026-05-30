@@ -105,25 +105,83 @@ print(json.dumps({"env": env, "cmd": rest}))
 # read as an escape; the sentinel is one-shot (it travels with the single
 # command — no persistent bypass state). All `[A-Za-z0-9,_-]` category chars
 # only; the reason is captured verbatim and JSON-encoded by audit_log downstream.
+#
+# COMMENT-TOKEN GUARD (#208): the sentinel is honored ONLY when its `#` is a
+# genuine UNQUOTED shell comment token — a `#` the executed shell itself treats
+# as the start of a comment. A `#` inside a quoted argument (e.g.
+# `gh pr comment 5 --body "x # claude-eng:skip=all reason=y"`) is argument text,
+# not a comment: the shell runs the whole command, so honoring it would let
+# ordinary quoted text (a commit message, a PR-body paste, audit output quoting
+# the sentinel) silently disarm every matcher with a falsified audit reason. The
+# offset of the last unquoted comment `#` is resolved with python3 (the same
+# dependency parse_env_prefix uses); python3 absent → the sentinel is NOT honored
+# (fail-safe no-op: enforcement stays armed, never a spurious skip).
 parse_skip_sentinel() {
   local _pss_in="$1" _pss_outvar="$2"
-  # SINGLE TRAILING LINE only. `[[:blank:]]` (space/tab, NOT newline) and a
-  # control-char-free reason (`[^[:cntrl:]]`, excludes newline) keep the match
-  # confined to the command's final line — anchored at end-of-string. This is
-  # load-bearing for security: bash `[[ =~ ]]` lets `.`/`[[:space:]]` match a
-  # newline, so a newline-spanning regex would let a line-1 sentinel greedily
-  # capture+strip a dangerous later line (e.g. `echo ok  # claude-eng:skip=x
-  # reason=y\ngit push --force origin main`) before any matcher sees it, while
-  # the shell still runs it — a silent, category-agnostic bypass with a
-  # falsified audit category. The trailing newline guard below is belt-and-
-  # suspenders against that.
-  local _pss_re='[[:blank:]]*#[[:blank:]]*claude-eng:skip=([A-Za-z0-9,_-]+)([[:blank:]]+reason=([^[:cntrl:]]*))?[[:blank:]]*$'
-  if [[ "$_pss_in" =~ $_pss_re ]] && [[ "${BASH_REMATCH[0]}" != *$'\n'* ]]; then
-    export SKIP_HOOKS="${BASH_REMATCH[1]}"
-    local _pss_reason="${BASH_REMATCH[3]:-}"
-    export SKIP_REASON="${_pss_reason:-unspecified}"
-    printf -v "$_pss_outvar" '%s' "${_pss_in%"${BASH_REMATCH[0]}"}"
-  else
-    printf -v "$_pss_outvar" '%s' "$_pss_in"
+  # Fast path: no namespaced sentinel present anywhere → nothing to honor, and
+  # we avoid spawning python3 on the (overwhelmingly common) no-escape command.
+  case "$_pss_in" in
+    *'claude-eng:skip='*) : ;;
+    *) printf -v "$_pss_outvar" '%s' "$_pss_in"; return ;;
+  esac
+  # Comment-token guard: emit the comment suffix (from the last UNQUOTED `#`
+  # boundary token to end of string) iff one exists; empty otherwise. A small
+  # quote/escape state machine — `chr()` literals avoid embedding `'`/`"`/`#`/`\`
+  # in this single-quoted python source.
+  local _pss_comment=""
+  if command -v python3 >/dev/null 2>&1; then
+    _pss_comment=$(printf '%s' "$_pss_in" | python3 -c '
+import sys
+s = sys.stdin.read()
+DQ = chr(34); SQ = chr(39); BS = chr(92); HS = chr(35); SP = chr(32); TB = chr(9)
+i = 0; n = len(s); q = None; off = -1
+while i < n:
+    c = s[i]
+    if q is not None:
+        if c == BS and q == DQ:
+            i += 2; continue
+        if c == q:
+            q = None
+    else:
+        if c == BS:
+            i += 2; continue
+        if c == DQ or c == SQ:
+            q = c
+        elif c == HS and (i == 0 or s[i-1] == SP or s[i-1] == TB):
+            off = i; break
+    i += 1
+if off >= 0:
+    sys.stdout.write(s[off:])
+' 2>/dev/null) || _pss_comment=""
   fi
+  if [ -z "$_pss_comment" ]; then
+    printf -v "$_pss_outvar" '%s' "$_pss_in"
+    return
+  fi
+  # SINGLE TRAILING LINE only. `[[:blank:]]` (space/tab, NOT newline) and a
+  # control-char-free reason (`[^[:cntrl:]]`, excludes newline) confine the match
+  # to the comment's first line — anchored at end-of-string. A line-1 sentinel
+  # whose comment suffix spans the newline into a dangerous later line fails this
+  # `$`-anchored match (the newline guard is belt-and-suspenders) → not honored,
+  # so it can never strip/disarm that later line.
+  local _pss_re='[[:blank:]]*#[[:blank:]]*claude-eng:skip=([A-Za-z0-9,_-]+)([[:blank:]]+reason=([^[:cntrl:]]*))?[[:blank:]]*$'
+  if [[ "$_pss_comment" =~ $_pss_re ]] && [[ "${BASH_REMATCH[0]}" != *$'\n'* ]]; then
+    # Exact suffix removal (locale-independent). If the comment is not a true
+    # suffix of the raw command (e.g. a trailing newline after it that command
+    # substitution dropped), the removal is a no-op — then do NOT honor, to
+    # preserve the pre-#208 "no clean strip → no escape" safety.
+    local _pss_stripped="${_pss_in%"$_pss_comment"}"
+    if [ "$_pss_stripped" != "$_pss_in" ]; then
+      export SKIP_HOOKS="${BASH_REMATCH[1]}"
+      local _pss_reason="${BASH_REMATCH[3]:-}"
+      export SKIP_REASON="${_pss_reason:-unspecified}"
+      # Trim the blanks left before the `#`.
+      if [[ "$_pss_stripped" =~ ^(.*[^[:blank:]])[[:blank:]]*$ ]]; then
+        _pss_stripped="${BASH_REMATCH[1]}"
+      fi
+      printf -v "$_pss_outvar" '%s' "$_pss_stripped"
+      return
+    fi
+  fi
+  printf -v "$_pss_outvar" '%s' "$_pss_in"
 }
