@@ -2702,6 +2702,31 @@ done
 
 trap - EXIT INT TERM
 
+# 38j (#213): the secret-scan CALL must FAIL-OPEN when secret_scan.sh is missing.
+# 38h proves safe_source warns on miss, but it uses an `echo` payload that never
+# reaches the scan_staged_secrets call. The real bug is at the call site: a
+# `git commit` with scan_staged_secrets undefined hit `command not found` and
+# BLOCKED (fail-closed), forcing SKIP_HOOKS=secret on every commit. Move the
+# helper aside and run a VALID commit on the non-protected fake branch — it must
+# NOT be blocked (fail-open per the §6.1 fail-policy table). Trap-protected.
+s213_path="$SHELL_ROOT/.claude/hooks/helpers/secret_scan.sh"
+s213_bak=$(mktemp -u)
+s213_restore() { [ -f "$s213_bak" ] && [ ! -f "$s213_path" ] && mv "$s213_bak" "$s213_path"; }
+trap 's213_restore' EXIT INT TERM
+if [ -f "$s213_path" ]; then
+  mv "$s213_path" "$s213_bak"
+  s213_rc=$(hook_run 'git commit -m "feat(#1): valid subject"')
+  s213_restore
+  trap - EXIT INT TERM
+  if [ "$s213_rc" = 0 ]; then
+    ok "38j: secret-scan call fails open when secret_scan.sh is missing (valid commit not blocked) (#213)"
+  else
+    ng "38j: secret-scan call fails CLOSED on missing helper (rc=$s213_rc, expected 0) (#213)"
+  fi
+else
+  ng "38j: secret_scan.sh not present in repo (#213)"
+fi
+
 # 38i: top-level placement assertion (#34) — safe_source calls must not
 # live inside a function body in pre_tool_use.sh. The in-function source
 # of git_matcher.sh at the pre-#34 pre_tool_use.sh:79 was a historical
