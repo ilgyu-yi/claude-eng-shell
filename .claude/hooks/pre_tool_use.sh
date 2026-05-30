@@ -335,8 +335,13 @@ case "$tool" in
         decided=1
       else
         # Sub-arm b: `gh issue edit <N> --remove-label directive` blocks
-        # on any filer, no `is_trusted_filer` resolution needed.
-        if [[ "$cmd" =~ gh[[:space:]]+issue[[:space:]]+edit[[:space:]]+([0-9]+).*--remove-label[[:space:]]+directive ]]; then
+        # on any filer, no `is_trusted_filer` resolution needed. Accept both
+        # the space- and =-separated forms (optionally quoted), with a
+        # word-boundary tail so a longer label like `directive-foo` does not
+        # over-match — mirroring the `--add-label` sibling regex (#211).
+        tfm_declassify_re='--remove-label[=[:space:]]+["'"'"']?directive([[:space:],"'"'"']|$)'
+        if [[ "$cmd" =~ gh[[:space:]]+issue[[:space:]]+edit[[:space:]]+[0-9]+ ]] \
+           && [[ "$cmd" =~ $tfm_declassify_re ]]; then
           block trusted-filer-mutate "Removing the 'directive' label declassifies an Issue and bypasses dir-mode review. Human-confirm required always (SPEC §1.5 filer-aware invariants). Or SKIP_HOOKS=trusted-filer-mutate SKIP_REASON='<why>' for legitimate edge cases."
         # Sub-arm a: `gh issue close <N>` — two-stage check.
         #   Stage 1 (discussion-tier, SPEC §5.19, Issue #116): if the Issue
