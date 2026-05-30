@@ -4666,6 +4666,41 @@ case $? in
   *) ng "55d2: expected rc=2 (block) got rc=$? (#95)" ;;
 esac
 
+# §55d3 (#211): the =-separated form must also block. Pre-#211 the matcher only
+# matched the space form, so `--remove-label=directive` (valid gh) silently
+# declassified. Fails against current code (rc=0/allow).
+pt55_run "gh issue edit 100 --remove-label=directive" >/dev/null 2>&1
+case $? in
+  2) ok "55d3: edit --remove-label=directive (equals form) → block (rc=2) (#211)" ;;
+  *) ng "55d3: equals-form declassify not blocked, got rc=$? (#211)" ;;
+esac
+
+# §55d4 (#211): a longer label like `directive-foo` must NOT over-match the
+# declassify guard (word-boundary tail). Pre-#211 the unanchored regex matched
+# the `directive` prefix and wrongly blocked (rc=2); removing a non-`directive`
+# label is legitimate and must be allowed.
+pt55_run "gh issue edit 100 --remove-label directive-foo" >/dev/null 2>&1
+case $? in
+  0) ok "55d4: edit --remove-label directive-foo does not over-match → allow (rc=0) (#211)" ;;
+  *) ng "55d4: directive-foo over-matched the declassify guard, got rc=$? (#211)" ;;
+esac
+
+# §55d5 (#211): `directive` as a non-first element of a comma-joined value list
+# still declassifies in real gh, so it must block. Pre-fix the regex anchored
+# directive at the head of the value and missed this.
+pt55_run "gh issue edit 100 --remove-label other,directive" >/dev/null 2>&1
+case $? in
+  2) ok "55d5: edit --remove-label other,directive (comma list) → block (rc=2) (#211)" ;;
+  *) ng "55d5: comma-list declassify not blocked, got rc=$? (#211)" ;;
+esac
+
+# §55d6 (#211): a comma list with NO `directive` element must still allow.
+pt55_run "gh issue edit 100 --remove-label bug,task" >/dev/null 2>&1
+case $? in
+  0) ok "55d6: edit --remove-label bug,task (no directive) → allow (rc=0) (#211)" ;;
+  *) ng "55d6: non-directive comma list wrongly blocked, got rc=$? (#211)" ;;
+esac
+
 # §55e: any filer + edit --add-label other-label → allow (not the remove-directive case).
 pt55_run "gh issue edit 100 --add-label task" >/dev/null 2>&1
 case $? in
