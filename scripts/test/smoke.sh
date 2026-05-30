@@ -5617,6 +5617,19 @@ else
   ng "63d: onboard_target.sh --tier 1 --dry-run unexpected rc=$s63d_rc (#118)"
 fi
 
+# §63d2 (#238): `--tier` with NO value must print the usage diagnostic and exit
+# non-zero — not crash with `$2: unbound variable` under `set -u`. Pre-#238 the
+# `--tier) TIER="$2"` arm dereferenced an unbound $2. Assert the diagnostic text
+# appears (proves the script's own validation ran, not bash's unbound-var abort).
+s63d2_out=$("$SHELL_ROOT/scripts/onboard_target.sh" --tier 2>&1 || true)
+s63d2_rc=0
+"$SHELL_ROOT/scripts/onboard_target.sh" --tier >/dev/null 2>&1 || s63d2_rc=$?
+if [ "$s63d2_rc" -ne 0 ] && printf '%s' "$s63d2_out" | grep -q -- "--tier"; then
+  ok "63d2: onboard_target --tier with no value diagnoses cleanly (rc=$s63d2_rc, no unbound-var crash) (#238)"
+else
+  ng "63d2: --tier with no value crashed or gave no diagnostic (rc=$s63d2_rc, out=$s63d2_out) (#238)"
+fi
+
 # §63e: each of the 7 dir-mode command procedure files contains a substrate
 # preflight step. Pattern broadened (#151) to match both the original
 # "Step 0 ... preflight" phrasing and the compressed "Substrate preflight"
