@@ -543,8 +543,15 @@ case "$tool" in
         # Gated labels: execution/task/bug (parent-marker consistency, #199) plus
         # the two tier type-keys initiative/directive (#251). The gated token is
         # BASH_REMATCH[2] (the leading `([^"' ]*,)?` comma-prefix is group 1).
+        # Terminator (#278 Theme C): a TRUE label boundary — comma (next label in
+        # a list), whitespace / closing quote (end of the --add-label value), or
+        # end-of-string. NOT `[^a-z]`: `-` and `_` are valid label-name chars, so
+        # `[^a-z]` let `directive-foo` / `task_old` over-match the bare type token
+        # and falsely trip this matcher on a custom label that merely starts with
+        # one. (A letter suffix like `executionish` was already excluded; this
+        # closes the hyphen/underscore-suffix gap.)
         lpc_label=
-        lpc_label_re='--add-label[=[:space:]]+["'"'"']?([^"'"'"' ]*,)?(execution|task|bug|initiative|directive)([^a-z]|$)'
+        lpc_label_re='--add-label[=[:space:]]+["'"'"']?([^"'"'"' ]*,)?(execution|task|bug|initiative|directive)(,|[[:space:]]|["'"'"']|$)'
         if [[ "$cmd" =~ $lpc_label_re ]]; then
           lpc_label="${BASH_REMATCH[2]}"
         fi
