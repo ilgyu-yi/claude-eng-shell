@@ -28,7 +28,7 @@
 두 개의 운영 계층(operating layer)이 있고, 둘 다 같은 generate → review → gated approval → audit 패턴을 따릅니다:
 
 - **eng-mode** — 엔지니어링 실행. `/file-issue` → `/work-on <N>` (branch + draft PR 생성) → Doc → Test → Code commit들 → `/ship` (reviewer 실행, AC 체크, ready 전환) → merge.
-- **dir-mode** — 유지보수 디렉팅. `/file-directive` → `/activate` → `/file-issue --parent <N>`로 Execution Issue 분기 → success signal이 충족되면 `/complete-directive`. v0에서는 수동 모드 전환; 자동 전환하는 orchestrator는 v1+입니다(SPEC §0.4).
+- **dir-mode** — 유지보수 디렉팅. `/file-directive` → `/activate` → `/file-issue --parent <N>`로 Execution Issue 분기 → success signal이 충족되면 `/complete-directive`. Directive 위에는 선택적 **Initiative** 계층이 있습니다 — 셸이 *작성하지 않고 소비하는* 계획 아티팩트입니다: `/consume-initiative <N>`은 Initiative Issue에서 Directive를 추출하고, `/initiative-feedback <N>`은 구조화된 코멘트를 다시 게시합니다(SPEC §1.7, §5.21–§5.22). v0에서는 수동 모드 전환; 자동 전환하는 orchestrator는 v1+입니다(SPEC §0.4).
 
 `unattended` 모드에서는 reviewer subagent가 각 체크포인트의 사람 승인을 대체합니다; `attended` 모드(기본)에서는 에이전트가 PR-ready에서 멈추고 사람 리뷰를 기다립니다.
 
@@ -75,6 +75,8 @@ claude-eng
 ### Dir-mode: Directive-scoped work
 
 **Directive**는 하나 이상의 Execution Issue를 범위로 묶는 중기적 방향성 컨텍스트입니다(SPEC §1.7, §2.1). 작업이 2-3개의 PR에 걸치거나 "왜 이 일을 하는가"라는 일관된 앵커가 필요할 때 사용하세요 — refactor, migration, 하위 시스템을 가진 feature 등. 일회성 변경에는 일반 `/file-issue`로 충분합니다.
+
+Directive는 독립적으로 존재할 수도 있고, **Initiative**에서 파생될 수도 있습니다 — 셸이 소비하는 상위 계획 아티팩트입니다(`/consume-initiative <N>`은 Initiative Issue에서 Directive를 채굴하고, `/initiative-feedback <N>`은 다시 보고합니다). Initiative Issue는 셸에 대해 읽기 전용입니다 — 셸은 절대 작성하거나 닫지 않습니다. 전체 `Initiative → Directive → Execution` 계층은 SPEC §1.7을 참조하세요.
 
 **단일-Directive 흐름(가장 흔함):**
 
