@@ -28,7 +28,7 @@ This is why the shell is structured around a hierarchy of artifacts (`MISSION.md
 Two operating layers, both following the same generate → review → gated approval → audit pattern:
 
 - **eng-mode** — engineering execution. `/file-issue` → `/work-on <N>` (creates branch + draft PR) → Doc → Test → Code commits → `/ship` (runs reviewers, ticks AC, marks ready) → merge.
-- **dir-mode** — directing maintenance. `/file-directive` → `/activate` → `/file-issue --parent <N>` to spin out Execution Issues → `/complete-directive` when success signals are met. Manual mode switching in v0; the orchestrator that auto-switches is v1+ (SPEC §0.4).
+- **dir-mode** — directing maintenance. `/file-directive` → `/activate` → `/file-issue --parent <N>` to spin out Execution Issues → `/complete-directive` when success signals are met. An optional **Initiative** tier sits above Directives — a planning artifact the shell *consumes, not authors*: `/consume-initiative <N>` extracts Directives from an Initiative Issue, and `/initiative-feedback <N>` posts structured comments back to it (SPEC §1.7, §5.21–§5.22). Manual mode switching in v0; the orchestrator that auto-switches is v1+ (SPEC §0.4).
 
 In `unattended` mode the reviewer subagents substitute for the human approvals at each checkpoint; in `attended` mode (default) the agent stops at PR-ready and waits for a human review.
 
@@ -75,6 +75,8 @@ External paths register too:
 ### Dir-mode: Directive-scoped work
 
 A **Directive** is a medium-term directional context that scopes one or more Execution Issues (SPEC §1.7, §2.1). Use one when the work crosses 2-3 PRs or needs a coherent "why are we doing this" anchor — a refactor, a migration, a feature with subsystems. For one-off changes, regular `/file-issue` is enough.
+
+A Directive may stand alone, or it may descend from an **Initiative** — a higher planning artifact the shell consumes (`/consume-initiative <N>` mines an Initiative Issue for Directives; `/initiative-feedback <N>` reports back). Initiative Issues are read-only to the shell — it never authors or closes them. See SPEC §1.7 for the full `Initiative → Directive → Execution` hierarchy.
 
 **Single-Directive flow (most common):**
 

@@ -7,7 +7,9 @@ issue → branch → draft PR → checklist commits → ready PR → merge. Ever
 
 PR-ready is the autonomy ceiling **by default** (`attended` mode). The `unattended` opt-in deliberately **extends** the ceiling past PR-ready, continuing through the `/ship` CI-wait → merge-or-park terminal step (`gh pr merge` on a clean PR, park on a hard blocker). So under `unattended`, merging a clean PR is *inside* the ceiling, not above it — authority and full contract are SPEC §5.7.1.
 
-**Dir-mode** (SPEC §1.7) extends the same pattern one level up: `MISSION.md` → Directive Issue → Execution Issue. Same generate → review → gated → audit shape; reviewer is `activation-reviewer` (§4.9). Workflow selection between eng-mode and dir-mode is manual; an automatic selector is a deferred capability (SPEC §0.4). Dir-mode commands live in §5.10–§5.18.
+**Dir-mode** (SPEC §1.7) extends the same pattern one level up: `MISSION.md` → Directive Issue → Execution Issue. Same generate → review → gated → audit shape; reviewer is `activation-reviewer` (§4.9). Workflow selection between eng-mode and dir-mode is manual; an automatic selector is a deferred capability (SPEC §0.4). Dir-mode commands live in §5.10–§5.22.
+
+An optional **Initiative** tier sits above Directives: a planning artifact the shell **consumes, not authors** (`/consume-initiative` extracts Directives from it; `/initiative-feedback` posts comments back). Initiative Issues are read-only to the shell — see SPEC §1.7 for the full `Initiative → Directive → Execution` hierarchy and the three initiative matchers (`label-parent-consistency` mutual-exclusivity + parent-XOR, `initiative-readonly`) in §6.1.
 
 ## Work order: Doc → Test → Code
 1. **Doc** — Write the behavior/contract to be changed into the SSOT (MISSION, README, CLAUDE.md, ARCHITECTURE, ADR) first.
