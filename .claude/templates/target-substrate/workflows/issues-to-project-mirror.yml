@@ -15,7 +15,9 @@ name: issues-to-project-mirror
 #                 (v3 4-state lifecycle; Revised dropped per Decision 7)
 #   - Priority  ← P0 / P1 / P2 / P3 label
 #   - Parent    ← body line 1 `Parent Directive: #N` (the marker `/file-issue
-#                 --parent` writes per SPEC §5.2)
+#                 --parent` writes per SPEC §5.2) OR `Parent Initiative: #N`
+#                 (an Initiative-parented Directive's own marker, §1.7
+#                 Derived-view integration; #262)
 #
 # NOT mirrored:
 #   - Iteration (user-managed on Project, owner-cadence — brief Decision 5)
@@ -103,12 +105,20 @@ jobs:
           done
           echo "priority_val=$priority_val" >> "$GITHUB_OUTPUT"
 
-          # Derive Parent from body line 1 `Parent Directive: #N` marker.
+          # Derive Parent from body line 1 marker (#262): `Parent Directive: #N`
+          # (an Execution Issue's parent) OR `Parent Initiative: #N` (an
+          # Initiative-parented Directive's own line-1 marker — §1.7
+          # Derived-view integration). Mutually exclusive by parent-XOR; both
+          # emit `#N`. Parent Directive stays a strict superset (recognized
+          # first, behavior for existing Issues unchanged). The Project Parent
+          # field is free-text, so the referent's type is immaterial.
           parent_val=""
           body=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json body --jq '.body')
           first_line=$(printf '%s\n' "$body" | head -1 || true)
           if printf '%s' "$first_line" | grep -qE '^Parent Directive: #[0-9]+$'; then
             parent_val=$(printf '%s' "$first_line" | sed -E 's/^Parent Directive: #([0-9]+)$/#\1/')
+          elif printf '%s' "$first_line" | grep -qE '^Parent Initiative: #[0-9]+$'; then
+            parent_val=$(printf '%s' "$first_line" | sed -E 's/^Parent Initiative: #([0-9]+)$/#\1/')
           fi
           echo "parent_val=$parent_val" >> "$GITHUB_OUTPUT"
 
