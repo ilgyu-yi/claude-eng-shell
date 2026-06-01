@@ -284,26 +284,31 @@ case "$tool" in
     # `should_skip` category; both fire on `gh pr merge`, each decides on its own).
     if printf '%s' "$cmd" | grep -qE '\bgh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; then
       decided=
-      # Strategy detection up front (not via an `if printf…grep` arm, which the
-      # §39b structural awk would mis-read as a second matcher entry): whole-token
-      # `--merge` so `--merge-queue`-style flags can't masquerade; `--auto --merge`
-      # (the /ship form) matches.
-      ms_is_merge=
-      printf '%s' "$cmd" | grep -qE '(^|[[:space:]])--merge([[:space:]]|$)' && ms_is_merge=1
+      # Strategy + PR via a gh-flag-aware token walk (parse_gh_merge_argv, #290):
+      # strategy is the explicit flag token (so `--merge` inside a --body value
+      # isn't read as the strategy, and short -m/-s/-r are recognized), PR is the
+      # first positional (or pull-URL), skipping value-flag values. Done up front
+      # (not via an `if printf…grep` arm, which the §39b structural awk would
+      # mis-read as a second matcher entry). safe_source-scoped, like ac-closeout.
+      ms_strategy=bare ; ms_pr=
+      if safe_source "$SHELL_ROOT/.claude/hooks/helpers/ac_closeout_gate.sh" merge-strategy; then
+        ms_parsed=$(parse_gh_merge_argv "$cmd")
+        ms_strategy=${ms_parsed%%	*}
+        ms_pr=${ms_parsed#*	}
+      fi
       if should_skip merge-strategy; then
         decided=1
       # An explicit `--merge` is allowed SILENTLY with no base resolution — keeps
       # the §39d "silent on --merge" invariant and skips gh calls on the happy path.
-      elif [ -n "$ms_is_merge" ]; then
+      elif [ "$ms_strategy" = merge ]; then
         mark_allow merge-strategy
         decided=1
       else
         # Non-`--merge` strategy (squash / rebase / bare). Resolve the PR base and
         # the repo default branch; block only when base == default. Bounded gh via
         # _ac_run_gh (timeout 5, macOS-safe). Fail-open if either is unresolvable.
-        ms_pr= ; ms_base= ; ms_default=
-        if safe_source "$SHELL_ROOT/.claude/hooks/helpers/ac_closeout_gate.sh" merge-strategy; then
-          ms_pr=$(extract_pr_from_merge_cmd "$cmd" || true)
+        ms_base= ; ms_default=
+        if command -v _ac_run_gh >/dev/null 2>&1; then
           if [ -n "$ms_pr" ]; then
             ms_base=$(_ac_run_gh pr view "$ms_pr" --json baseRefName -q .baseRefName 2>/dev/null || true)
           else
