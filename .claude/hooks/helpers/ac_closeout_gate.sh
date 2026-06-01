@@ -59,6 +59,73 @@ _ac_run_gh() {
   fi
 }
 
+# parse_gh_merge_argv <cmd> — gh-flag-aware parse of a `gh pr merge` command for
+# the merge-strategy matcher (#290). Echoes "<strategy>\t<pr>":
+#   strategy ∈ merge|squash|rebase|bare — the explicit strategy FLAG token
+#     (`--merge`/`-m`, `--squash`/`-s`, `--rebase`/`-r`), NOT a substring, so a
+#     `--merge` inside a `--body`/`--subject` *value* is not read as the strategy
+#     (#290 A) and the short `-m` is recognized as compliant (#290 C).
+#   pr = the first POSITIONAL token (or a `.../pull/N` URL's N), skipping
+#     value-taking flags' values (#290 B); empty if the command names none
+#     (caller falls back to the current branch's PR).
+# Shell-aware tokenization (python3 `shlex`, mirroring check_destructive_args)
+# so a quoted multi-word flag value stays one token; `read -ra` fallback when
+# python3 is absent (imperfect only for a multi-word quoted value containing a
+# bare `--merge`/`-m` token — the degraded path). An unparseable command
+# (unclosed quote — which would not execute in a real shell) yields strategy=bare
+# so the caller takes the conservative base-resolution path.
+parse_gh_merge_argv() {
+  local cmd="$1" rest
+  rest=$(printf '%s' "$cmd" | sed -nE 's/.*gh[[:space:]]+pr[[:space:]]+merge//p')
+  local -a toks=()
+  if command -v python3 >/dev/null 2>&1; then
+    local _out
+    if _out=$(printf '%s' "$rest" | python3 -c '
+import shlex, sys
+try:
+    for t in shlex.split(sys.stdin.read()):
+        print(t)
+except ValueError:
+    sys.exit(2)
+' 2>/dev/null); then
+      local _t
+      while IFS= read -r _t; do [ -n "$_t" ] && toks+=("$_t"); done <<< "$_out"
+    else
+      printf 'bare\t'; return 0
+    fi
+  else
+    local IFS=$' \t\n' _o=$-
+    set -f
+    read -ra toks <<< "$rest"
+    case "$_o" in *f*) ;; *) set +f ;; esac
+  fi
+  local strategy=bare pr="" skip_next="" t i
+  for ((i=0; i<${#toks[@]}; i++)); do
+    t="${toks[$i]}"
+    if [ -n "$skip_next" ]; then skip_next=""; continue; fi
+    case "$t" in
+      --merge|-m)   strategy=merge ;;
+      --squash|-s)  strategy=squash ;;
+      --rebase|-r)  strategy=rebase ;;
+      # Value-taking flags consume their following token (so a value is never
+      # mistaken for the PR or a strategy flag). `--flag=value` is one token.
+      --body|-b|--body-file|--subject|-t|--match-head-commit|--author-email|--repo|-R) skip_next=1 ;;
+      --*=*) : ;;
+      -*) : ;;   # other boolean flags (--auto/--admin/--delete-branch/-d/--disable-auto): no value
+      *)
+        if [ -z "$pr" ]; then
+          case "$t" in
+            */pull/*) pr="${t##*/pull/}"; pr="${pr%%[!0-9]*}" ;;
+            *[!0-9]*) ;;   # non-integer positional → ignore
+            *) pr="$t" ;;
+          esac
+        fi
+        ;;
+    esac
+  done
+  printf '%s\t%s' "$strategy" "$pr"
+}
+
 pr_needs_closeout() {
   local pr="$1"
   [ -z "$pr" ] && return 2
