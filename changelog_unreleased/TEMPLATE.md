@@ -17,11 +17,12 @@ Every PR that lands an end-user-observable change adds a **changelog fragment** 
 
 ## What it contains
 
-A **single-line markdown bullet** beginning with `- `. The bullet **must contain `(#<N>)`** where `<N>` matches the filename stem. The CI fragment-check rejects:
+A **single-line markdown bullet** beginning with `- `. The bullet **must contain `(#<N>)`** where `<N>` matches the filename stem. The CI fragment-check validates **every** added fragment (one valid fragment does not excuse a malformed sibling in the same PR) and rejects:
 
 - Files outside the six category subdirectories.
 - Filenames whose stem is not a positive integer.
 - Bullets whose `(#<N>)` reference does not match the filename stem.
+- Bullets that do not begin with `- `.
 
 That is the entire contract. No YAML frontmatter. No multi-paragraph prose. No nested headers. The directory is the category, the filename is the issue/PR link, the bullet is the user-facing line.
 
