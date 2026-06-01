@@ -80,7 +80,12 @@ jobs:
 
           # Per-fragment validation: positive integer stem + (#<stem>) match
           # in the bullet + stem in the allow-set.
-          ok=0
+          # ALL added fragments must pass — a single valid fragment must NOT
+          # mask a malformed sibling (all-valid contract, mirrors
+          # scripts/release_consolidate.sh; SPEC §18.6). Accumulate failures in
+          # `bad` so every offending fragment gets a `::error file=` annotation
+          # in one run, then fail after the loop.
+          bad=0
           while IFS= read -r path; do
             [ -z "$path" ] && continue
             stem=$(basename "$path" .md)
@@ -88,29 +93,37 @@ jobs:
             case "$stem" in
               0|0*)
                 echo "::error file=$path::Filename stem must be a positive integer (got '$stem')." >&2
+                bad=1
                 continue
                 ;;
             esac
 
+            if ! grep -qE '^- ' "$path"; then
+              echo "::error file=$path::Fragment must be a single-line markdown bullet beginning with '- '. See changelog_unreleased/TEMPLATE.md." >&2
+              bad=1
+              continue
+            fi
+
             if ! grep -qE "\(#${stem}\)" "$path"; then
               echo "::error file=$path::Fragment body does not contain (#${stem}) matching filename stem. See changelog_unreleased/TEMPLATE.md." >&2
+              bad=1
               continue
             fi
 
             if ! printf '%s\n' $allowed | grep -qx "$stem"; then
               echo "::error file=$path::Filename stem '$stem' is neither this PR's number (${PR_NUM}) nor in closingIssuesReferences. Rename the file to match, or update the PR's Closes/Refs to include #${stem}." >&2
+              bad=1
               continue
             fi
 
-            echo "check-changelog: $path validates (stem=$stem in allow-set)"
-            ok=1
+            echo "check-changelog: $path validates (stem=$stem, bullet form, in allow-set)"
           done <<EOF
 $added
 EOF
 
-          if [ "$ok" = 1 ]; then
-            echo "check-changelog: at least one valid fragment found — passing."
-            exit 0
+          if [ "$bad" = 1 ]; then
+            echo "::error::One or more added fragments failed validation. Every added fragment must satisfy all rules (positive-integer stem, leading '- ' bullet, (#<N>) ref matching the stem, stem in the PR/issue allow-set) — one valid fragment does not excuse a malformed sibling. See SPEC §18.6." >&2
+            exit 1
           fi
-          echo "::error::No fragment passed all three validation rules (stem positive integer, (#<N>) bullet ref, stem in PR/issue allow-set). See SPEC §18.1." >&2
-          exit 1
+          echo "check-changelog: all added fragments valid — passing."
+          exit 0
