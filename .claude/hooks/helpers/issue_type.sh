@@ -294,13 +294,33 @@ resolve_gh_issue_target() {
     return 0
   fi
   # Bare/flag-ordered: tokenize and walk, skipping flags (+ their value token).
-  # Pin IFS locally: a caller using `IFS=$'\t' read ... <<< "$(resolve_...)"`
-  # would otherwise leak tab-only IFS into this command substitution, collapsing
-  # a space-separated command into one token (#276 — the bug that motivated the
-  # two-statement call form at the matcher sites).
-  local IFS=$' \t\n'
+  # Tokenize SHELL-AWARE (quotes preserved) so a quoted flag value's interior
+  # digits — `--body "fixes 99 things"` — are not mistaken for the positional
+  # issue selector (#283). Mirror check_destructive_args: python3 `shlex.split`,
+  # else a `read -ra` fallback. On an unparseable command (unclosed quote) emit
+  # an empty issue → the caller fails open (such a command would not execute in
+  # a real shell anyway). The `read -ra` fallback keeps the #276 local-IFS pin so
+  # a caller's `IFS=$'\t'` cannot leak into this command substitution.
   local -a toks=()
-  read -ra toks <<< "$cmd"
+  if command -v python3 >/dev/null 2>&1; then
+    local _tok_out
+    if _tok_out=$(printf '%s' "$cmd" | python3 -c '
+import shlex, sys
+try:
+    for t in shlex.split(sys.stdin.read()):
+        print(t)
+except ValueError:
+    sys.exit(2)
+' 2>/dev/null); then
+      local _t
+      while IFS= read -r _t; do [ -n "$_t" ] && toks+=("$_t"); done <<< "$_tok_out"
+    else
+      printf '\t'; return 0   # unparseable (unclosed quote) → fail open
+    fi
+  else
+    local IFS=$' \t\n'
+    read -ra toks <<< "$cmd"
+  fi
   local i t skip_next=""
   for ((i=0; i<${#toks[@]}; i++)); do
     t="${toks[$i]}"
@@ -319,5 +339,13 @@ resolve_gh_issue_target() {
       esac
     fi
   done
+  # Normalize a host-prefixed repo (#283): gh accepts `[HOST/]OWNER/REPO`, so a
+  # `--repo github.com/o/r` arrives as three segments; strip the leading host so
+  # downstream `${repo%%/*}`/`${repo##*/}` derive owner=o, name=r (not
+  # owner=github.com, name=r → a wrong-repo / fail-open lookup). A plain
+  # `owner/name` (one slash) is unchanged.
+  case "$repo" in
+    */*/*) repo="${repo#*/}" ;;
+  esac
   printf '%s\t%s' "$issue" "$repo"
 }
