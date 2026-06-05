@@ -28,7 +28,12 @@ The bypass routes through `should_skip branch` and lands in `audit.jsonl` — ne
 
 2. **Confirm the seed** — surface to the user (attended) the two files that will be seeded and the remote that will receive the push (`git remote get-url origin`, if set). If no `origin` remote is configured, note that the push step is skipped and the operator must add a remote + push manually.
 
-3. **Seed the SSOT files** — write `MISSION.md` from `.claude/templates/mission.md` (substituting `{{ today }}`) and `README.md` from `.claude/templates/readme_for_target.md` (substituting `{{ repo_name }}`). These Writes occur on the unborn-HEAD `main` and are covered by the same `branch` exception — the Edit/Write protected-branch arm (SPEC §6.1) is disarmed for the seed only.
+3. **Seed the SSOT files** — copy the two templates into place **with Bash `cp`, not the Edit/Write tool**:
+   ```bash
+   cp "$CLAUDE_ENG_SHELL_ROOT/.claude/templates/mission.md" MISSION.md
+   cp "$CLAUDE_ENG_SHELL_ROOT/.claude/templates/readme_for_target.md" README.md
+   ```
+   Why `cp` and not Write: the Edit/Write protected-branch arm (SPEC §6.1) blocks writes on the unborn-HEAD `main`, and a trailing sentinel cannot disarm it (an Edit/Write tool call has no command string to carry the sentinel). A `cp` into the registered target path carries no protected-branch check and is in-scope, so it is the correct seeding path. The templates carry `{{ today }}` / `{{ repo_name }}` placeholders — these are drafts for the user to complete after bootstrap; substitute them now only if the values are unambiguous (e.g. `{{ repo_name }}` from `basename "$PWD"`), otherwise leave them for `/onboard`'s SSOT step to flag.
 
 4. **Seed commit** — stage exactly the two seed files and commit with the exact escape sentinel:
    ```bash
@@ -37,7 +42,7 @@ The bypass routes through `should_skip branch` and lands in `audit.jsonl` — ne
    ```
    The message is a `chore` (no issue # required — there is no issue tracker state yet).
 
-5. **Audit** — `audit_log info bootstrap-repo seeded "branch=main remote=<origin-url-or-none> files=MISSION.md,README.md"`.
+5. **Audit** — the seed commit's bypass is *already* recorded by the `branch` escape's `should_skip` path (this is the load-bearing audit guarantee — never silent). Additionally emit an explicit stage-0 record by sourcing the hook runtime and calling `audit_log info bootstrap-repo seeded "branch=main remote=<origin-url-or-none> files=MISSION.md,README.md"` (run via Bash: `. "$CLAUDE_ENG_SHELL_ROOT/.claude/hooks/hookrt.sh"` then the `audit_log` call), the same pattern `/file-directive` etc. use.
 
 6. **Publish** — if an `origin` remote exists, `git push -u origin main` (name the branch explicitly; a bare/`HEAD` refspec is not verifiable by the push matcher, SPEC §6.1). GitHub adopts the first pushed branch as the repo default. If no remote, print the manual `git remote add origin <url> && git push -u origin main` follow-up.
 

@@ -7332,13 +7332,17 @@ else
   ng "80d: .claude/commands/bootstrap-repo.md missing skill contract or exact sentinel (#307)"
 fi
 
-# 80e: SPEC §5.0 defines stage-0 as preceding /onboard and names the exception.
+# 80e: SPEC §5.0 defines stage-0 as preceding /onboard and names the exception,
+# AND is cross-referenced from BOTH §1.7 (bootstrap path) and §5.1 (/onboard) —
+# AC #2 of #307 requires both back-references, not just §5.0's existence.
 if grep -qE '^### 5\.0 `/bootstrap-repo`' "$SHELL_ROOT/SPEC.md" \
    && grep -qiE 'stage-0' "$SHELL_ROOT/SPEC.md" \
-   && grep -qiE 'bootstrap exception \(target repos\)|first-commit exception.*target|target.*first-commit exception' "$SHELL_ROOT/SPEC.md"; then
-  ok "80e: SPEC §5.0 defines stage-0 + the target bootstrap exception (#307)"
+   && grep -qiE 'bootstrap exception \(target repos\)|first-commit exception.*target|target.*first-commit exception' "$SHELL_ROOT/SPEC.md" \
+   && grep -qE 'Stage-0 precedes all of this|stage-0.*§5\.0|/bootstrap-repo \(§5\.0\)' "$SHELL_ROOT/SPEC.md" \
+   && grep -qE 'Precedes.*`/bootstrap-repo` \(§5\.0\)|Precedes.*stage-0' "$SHELL_ROOT/SPEC.md"; then
+  ok "80e: SPEC §5.0 defines stage-0 + target exception + §1.7/§5.1 cross-refs (#307)"
 else
-  ng "80e: SPEC §5.0 must define stage-0 and the target-repo bootstrap exception (#307)"
+  ng "80e: SPEC §5.0 must define stage-0, the target exception, and be cross-ref'd from §1.7 + §5.1 (#307)"
 fi
 
 # 80f: .claude/CLAUDE.md documents the stage-0 exception, and the seed README
