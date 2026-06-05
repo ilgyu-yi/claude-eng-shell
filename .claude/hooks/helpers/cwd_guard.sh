@@ -3,7 +3,9 @@
 
 # in_scope: returns 0 if PWD is inside any registry entry, 1 otherwise.
 in_scope() {
-  local registry="$CLAUDE_ENG_SHELL_ROOT/.claude/state/registry.txt"
+  # Per-project registry (#316), argless = hook context. set -u-safe; a missing
+  # file → return 1 (out-of-scope) → hooks fail-open, as in the shared era.
+  local registry; registry=$(eng_registry_file)
   [ -f "$registry" ] || return 1
   local pwd_real
   pwd_real=$(cd "$PWD" 2>/dev/null && pwd -P) || return 1
@@ -45,11 +47,12 @@ path_in_scope() {
   if [ -d "$ancestor" ]; then
     p="$(cd "$ancestor" 2>/dev/null && pwd -P)$suffix"
   fi
-  # Allow shell self-modification
+  # Allow shell self-modification (registry-location-independent; set -u-safe).
   case "$p/" in
-    "$CLAUDE_ENG_SHELL_ROOT"/*) return 0 ;;
+    "${CLAUDE_ENG_SHELL_ROOT:-}"/*) [ -n "${CLAUDE_ENG_SHELL_ROOT:-}" ] && return 0 ;;
   esac
-  local registry="$CLAUDE_ENG_SHELL_ROOT/.claude/state/registry.txt"
+  # Per-project registry (#316), argless = hook context. set -u-safe.
+  local registry; registry=$(eng_registry_file)
   [ -f "$registry" ] || return 1
   local entry
   while IFS= read -r entry; do

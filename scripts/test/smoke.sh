@@ -116,6 +116,18 @@ inject_into "$TMP/fake" >/dev/null 2>&1 && ok "inject_into ok" || ng "inject_int
 grep -q "$TMP/fake" "$TMP/fake/.claude/eng-state/registry.txt" 2>/dev/null && ok "registry entry added (per-project, #316)" || ng "registry not updated"
 grep -q "^.claude/settings.local.json" "$TMP/fake/.git/info/exclude" 2>/dev/null && ok ".git/info/exclude updated" || ng "exclude not updated"
 
+# #316: inject now records the entry in the TARGET's per-project registry. The
+# hook-integration tests (§7+) and hook_run drive the hook with CLAUDE_PROJECT_DIR
+# unset — so audit lands at the legacy REAL_AUDIT path AND in_scope resolves via
+# the legacy shared-registry fallback. Mirror the target into the shared registry
+# so those matcher tests reach the matchers (the per-project path is covered by §84).
+# Use the CANONICAL path (inject_into canonicalizes via `cd && pwd -P`; the hook's
+# in_scope compares against pwd -P), else macOS /var vs /private/var never matches.
+FAKE_CANON=$(cd "$TMP/fake" && pwd -P)
+mkdir -p "$SHELL_ROOT/.claude/state"
+grep -qxF "$FAKE_CANON" "$SHELL_ROOT/.claude/state/registry.txt" 2>/dev/null \
+  || printf '%s\n' "$FAKE_CANON" >> "$SHELL_ROOT/.claude/state/registry.txt"
+
 # ---------- 5. cwd_guard ----------
 # hookrt.sh hosts eng_registry_file (#316); cwd_guard rides it. In a real hook
 # the hook sources hookrt first — mirror that here. The registry now resolves
