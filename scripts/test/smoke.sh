@@ -7409,6 +7409,87 @@ else
   fi
 fi
 
+# ---------- 82. per-project binding + hook self-location (#312, Directive #311) ----------
+# The shell must be resolvable per project WITHOUT the global CLAUDE_ENG_SHELL_ROOT
+# env: a project-local untracked `.claude/eng-shell-root` symlink → canonical root,
+# hooks invoked via that symlink self-locate their root from BASH_SOURCE (pwd -P),
+# and the injected `settings.local.json` symlinks to `settings.injected.json` whose
+# hook commands use ${CLAUDE_PROJECT_DIR}/.claude/eng-shell-root/... . The shell's
+# OWN settings.json stays $CLAUDE_ENG_SHELL_ROOT-based (dogfood unchanged).
+
+# 82a: with CLAUDE_ENG_SHELL_ROOT UNSET, a hook invoked through the project-local
+# eng-shell-root symlink self-locates the canonical root and still enforces —
+# a protected-branch commit is blocked (rc=2). (Red until the self-location code.)
+S82_PROJ=$(cd "$(mktemp -d)" && pwd -P)
+( cd "$S82_PROJ" && (git init -q -b main 2>/dev/null || { git init -q && git checkout -q -b main; }) \
+    && git commit -q --allow-empty -m init 2>/dev/null ) || true
+mkdir -p "$S82_PROJ/.claude"
+ln -sfn "$SHELL_ROOT" "$S82_PROJ/.claude/eng-shell-root"
+printf '%s\n' "$S82_PROJ" >> "$SHELL_ROOT/.claude/state/registry.txt"   # in_scope needs it registered
+
+s82_hook_noenv() {
+  # $1 = project cwd, $2 = hook path (via the symlink), $3 = command ; echoes rc
+  ( cd "$1" || exit 1
+    printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(printf '%s' "$3" | jq -Rs .)" \
+      | env -u CLAUDE_ENG_SHELL_ROOT bash "$2" >/dev/null 2>&1
+    printf '%s' "$?" )
+}
+s82_rc=$(s82_hook_noenv "$S82_PROJ" "$S82_PROJ/.claude/eng-shell-root/.claude/hooks/pre_tool_use.sh" \
+  'git commit -m "chore: x"')
+if [ "$s82_rc" = "2" ]; then
+  ok "82a: env-unset hook via eng-shell-root symlink self-locates + enforces (protected commit blocked) (#312)"
+else
+  ng "82a: env-unset hook should self-locate via eng-shell-root + block protected commit (rc=$s82_rc) (#312)"
+fi
+
+# unregister + remove the fixture
+s82_tmp=$(mktemp); grep -vxF "$S82_PROJ" "$SHELL_ROOT/.claude/state/registry.txt" > "$s82_tmp" 2>/dev/null || true
+mv "$s82_tmp" "$SHELL_ROOT/.claude/state/registry.txt"
+rm -rf "$S82_PROJ"
+
+# 82b: inject_into creates `.claude/eng-shell-root` resolving to the canonical
+# root, adds it to .git/info/exclude, and is idempotent (no duplicate exclude line).
+S82B=$(cd "$(mktemp -d)" && pwd -P)
+( cd "$S82B" && git init -q ) || true
+inject_into "$S82B" >/dev/null 2>&1
+inject_into "$S82B" >/dev/null 2>&1   # second run — idempotency
+s82b_link=$(cd "$S82B/.claude/eng-shell-root" 2>/dev/null && pwd -P)
+s82b_excl=$(grep -c '^\.claude/eng-shell-root$' "$S82B/.git/info/exclude" 2>/dev/null || true)
+if [ -L "$S82B/.claude/eng-shell-root" ] && [ "$s82b_link" = "$SHELL_ROOT" ] && [ "$s82b_excl" = "1" ]; then
+  ok "82b: inject creates eng-shell-root → canonical root + idempotent .git/info/exclude (#312)"
+else
+  ng "82b: inject must create eng-shell-root→root (got '$s82b_link') + single exclude line (got $s82b_excl) (#312)"
+fi
+
+# 82c: inject points settings.local.json at settings.injected.json (not settings.json).
+s82c_tgt=$(readlink "$S82B/.claude/settings.local.json" 2>/dev/null || echo "")
+if printf '%s' "$s82c_tgt" | grep -q '/\.claude/settings\.injected\.json$'; then
+  ok "82c: injected settings.local.json → settings.injected.json (#312)"
+else
+  ng "82c: settings.local.json should symlink to settings.injected.json (got '$s82c_tgt') (#312)"
+fi
+rm -rf "$S82B"
+
+# 82d: settings.injected.json exists and ALL 5 hook commands use the
+# ${CLAUDE_PROJECT_DIR}/.claude/eng-shell-root/.claude/hooks/ form (count-guarded to 5).
+S82_INJ="$SHELL_ROOT/.claude/settings.injected.json"
+s82d_n=$(grep -cE '\$\{?CLAUDE_PROJECT_DIR\}?/\.claude/eng-shell-root/\.claude/hooks/' "$S82_INJ" 2>/dev/null || true)
+if [ -f "$S82_INJ" ] && [ "$s82d_n" = "5" ]; then
+  ok "82d: settings.injected.json routes all 5 hook commands via \$CLAUDE_PROJECT_DIR/eng-shell-root (#312)"
+else
+  ng "82d: settings.injected.json must route 5 hook commands via \$CLAUDE_PROJECT_DIR/eng-shell-root (got $s82d_n) (#312)"
+fi
+
+# 82e: dogfood guard — the shell's OWN settings.json is UNCHANGED: still
+# $CLAUDE_ENG_SHELL_ROOT-based, and does NOT reference eng-shell-root.
+S82_OWN="$SHELL_ROOT/.claude/settings.json"
+if grep -qF '$CLAUDE_ENG_SHELL_ROOT/.claude/hooks/' "$S82_OWN" \
+   && ! grep -q 'eng-shell-root' "$S82_OWN"; then
+  ok "82e: shell's own settings.json stays \$CLAUDE_ENG_SHELL_ROOT-based (dogfood intact) (#312)"
+else
+  ng "82e: shell's own settings.json must stay \$CLAUDE_ENG_SHELL_ROOT-based, no eng-shell-root (#312)"
+fi
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"
