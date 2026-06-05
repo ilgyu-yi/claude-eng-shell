@@ -7259,6 +7259,110 @@ else
   ng "79b: SPEC §5.2 missing the /file-issue priority contract (#291)"
 fi
 
+# ---------- 80. stage-0 /bootstrap-repo (#307, Directive #306) ----------
+# Stage-0 bootstrap owns the no-default-branch starting state (empty repo /
+# unborn HEAD). The protected-branch gate is NAME-based, so on an unborn HEAD
+# (`git symbolic-ref --short HEAD` → main while `rev-parse --verify HEAD`
+# fails) the seed commit is blocked — correct general behavior. /bootstrap-repo
+# owns a single, scoped, audit-logged bypass for that seed commit via the
+# `branch` escape. These assertions pin BOTH halves: the gate stays intact for a
+# plain unborn-HEAD commit, AND the bootstrap sentinel is honored — plus the
+# command file carrying the exact sentinel string (the implementation contract).
+
+# Run the hook in an arbitrary cwd; echo its exit code (2=block, 0=allow).
+s80_hook() {
+  # $1 = dir, $2 = command string
+  ( cd "$1" || exit 1
+    printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
+      "$(printf '%s' "$2" | jq -Rs .)" \
+      | CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT" \
+        bash "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" >/dev/null 2>&1
+    printf '%s' "$?" )
+}
+
+# Fresh repo with an UNBORN HEAD on `main` — no commit, so HEAD is unborn and
+# `git symbolic-ref --short HEAD` reports `main` (the stage-0 starting state).
+# The repo is REGISTERED (physical-resolved, like §5b): the hook short-circuits
+# (`in_scope || exit 0`) outside the registry, and a real target IS registered
+# (clone-into / register) before stage-0 runs — so the gate must be exercised
+# inside the registry, exactly as /bootstrap-repo encounters it.
+S80_REPO=$(cd "$(mktemp -d)" && pwd -P)
+( cd "$S80_REPO" && (git init -q -b main 2>/dev/null || { git init -q && git checkout -q -b main; }) ) || true
+printf '%s\n' "$S80_REPO" >> "$SHELL_ROOT/.claude/state/registry.txt"
+s80_branch=$(cd "$S80_REPO" && git symbolic-ref --short HEAD 2>/dev/null)
+s80_unborn=$(cd "$S80_REPO" && git rev-parse --verify HEAD 2>/dev/null || printf 'unborn')
+
+# 80a: fixture sanity — unborn HEAD reporting a protected name (`main`).
+if [ "$s80_branch" = main ] && [ "$s80_unborn" = unborn ]; then
+  ok "80a: stage-0 fixture is an unborn HEAD on protected name 'main' (#307)"
+else
+  ng "80a: stage-0 fixture not unborn-on-main (branch='$s80_branch' head='$s80_unborn') (#307)"
+fi
+
+# 80b: gate intact — a plain seed commit on the unborn-HEAD `main` is BLOCKED.
+if [ "$(s80_hook "$S80_REPO" 'git commit -m "chore: seed first commit (MISSION + README)"')" = "2" ]; then
+  ok "80b: plain unborn-HEAD commit blocked — name-based gate intact (#307)"
+else
+  ng "80b: plain unborn-HEAD commit should be blocked by the protected-branch gate (#307)"
+fi
+
+# 80c: bootstrap exception — the SAME commit carrying the stage-0 trailing
+# sentinel is ALLOWED (and routes through should_skip, i.e. audit-logged).
+s80_seed='git commit -m "chore: seed first commit (MISSION + README)"  # claude-eng:skip=branch reason=stage-0-bootstrap-seed-on-unborn-HEAD'
+if [ "$(s80_hook "$S80_REPO" "$s80_seed")" = "0" ]; then
+  ok "80c: unborn-HEAD seed commit with bootstrap sentinel allowed (#307)"
+else
+  ng "80c: bootstrap-sentinel seed commit should be allowed via the branch escape (#307)"
+fi
+
+# Unregister the fixture and remove it.
+s80_tmp=$(mktemp); grep -vxF "$S80_REPO" "$SHELL_ROOT/.claude/state/registry.txt" > "$s80_tmp" 2>/dev/null || true
+mv "$s80_tmp" "$SHELL_ROOT/.claude/state/registry.txt"
+rm -rf "$S80_REPO"
+
+# 80d: the command file exists with the skill contract AND carries the EXACT
+# sentinel string the §5.0 contract / smoke 80c pin (red until the Code phase).
+BOOTSTRAP_CMD="$SHELL_ROOT/.claude/commands/bootstrap-repo.md"
+if [ -f "$BOOTSTRAP_CMD" ] \
+   && grep -qE '^## Procedure' "$BOOTSTRAP_CMD" \
+   && grep -qE '^## Forbidden' "$BOOTSTRAP_CMD" \
+   && grep -qF 'claude-eng:skip=branch reason=stage-0-bootstrap-seed-on-unborn-HEAD' "$BOOTSTRAP_CMD"; then
+  ok "80d: /bootstrap-repo command file carries Procedure/Forbidden + exact sentinel (#307)"
+else
+  ng "80d: .claude/commands/bootstrap-repo.md missing skill contract or exact sentinel (#307)"
+fi
+
+# 80e: SPEC §5.0 defines stage-0 as preceding /onboard and names the exception,
+# AND is cross-referenced from BOTH §1.7 (bootstrap path) and §5.1 (/onboard) —
+# AC #2 of #307 requires both back-references, not just §5.0's existence.
+if grep -qE '^### 5\.0 `/bootstrap-repo`' "$SHELL_ROOT/SPEC.md" \
+   && grep -qiE 'stage-0' "$SHELL_ROOT/SPEC.md" \
+   && grep -qiE 'bootstrap exception \(target repos\)|first-commit exception.*target|target.*first-commit exception' "$SHELL_ROOT/SPEC.md" \
+   && grep -qE 'Stage-0 precedes all of this|stage-0.*§5\.0|/bootstrap-repo \(§5\.0\)' "$SHELL_ROOT/SPEC.md" \
+   && grep -qE 'Precedes.*`/bootstrap-repo` \(§5\.0\)|Precedes.*stage-0' "$SHELL_ROOT/SPEC.md"; then
+  ok "80e: SPEC §5.0 defines stage-0 + target exception + §1.7/§5.1 cross-refs (#307)"
+else
+  ng "80e: SPEC §5.0 must define stage-0, the target exception, and be cross-ref'd from §1.7 + §5.1 (#307)"
+fi
+
+# 80f: .claude/CLAUDE.md documents the stage-0 exception, and the seed README
+# template SSOT exists.
+if grep -qiE 'stage-0 exception' "$SHELL_ROOT/.claude/CLAUDE.md" \
+   && [ -f "$SHELL_ROOT/.claude/templates/readme_for_target.md" ]; then
+  ok "80f: CLAUDE.md documents stage-0 exception + readme_for_target.md template present (#307)"
+else
+  ng "80f: CLAUDE.md stage-0 exception note or readme_for_target.md template missing (#307)"
+fi
+
+# 80g: /onboard stays read-only — no mutating git/gh-write command introduced.
+ONBOARD_CMD="$SHELL_ROOT/.claude/commands/onboard.md"
+if [ -f "$ONBOARD_CMD" ] \
+   && ! grep -qE 'gh (issue|pr) create|git (commit|push|checkout -b)|gh label create' "$ONBOARD_CMD"; then
+  ok "80g: /onboard remains read-only (no mutating command) (#307)"
+else
+  ng "80g: /onboard.md must stay read-only — no mutating command (#307)"
+fi
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"
