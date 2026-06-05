@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-SHELL_ROOT="${CLAUDE_ENG_SHELL_ROOT:-}"
+SHELL_ROOT="${CLAUDE_ENG_SHELL_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 [ -n "$SHELL_ROOT" ] && [ -d "$SHELL_ROOT/.claude/hooks/helpers" ] || exit 0
+# Back-fill the env var from self-location (#312) so helpers that reference
+# $CLAUDE_ENG_SHELL_ROOT resolve even when launched with no global env.
+export CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT"
 
 # Primitive bootstrap of hookrt.sh (audit_log + safe_source). SPEC §6.1.
 hookrt="$SHELL_ROOT/.claude/hooks/hookrt.sh"

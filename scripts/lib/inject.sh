@@ -1,6 +1,13 @@
 # shellcheck shell=bash
 # scripts/lib/inject.sh — shared inject logic for clone-into / register.
 # Source and call inject_into "$TARGET".
+#
+# Per-project binding (#312, Directive #311): inject_into drops an untracked
+# `.claude/eng-shell-root` symlink → the canonical shell root and points the
+# target's `settings.local.json` at `settings.injected.json` (whose hook
+# commands use ${CLAUDE_PROJECT_DIR}/.claude/eng-shell-root/...). Both are added
+# to the target's .git/info/exclude. Net effect: a plain `claude` in the target
+# resolves the shell with no global CLAUDE_ENG_SHELL_ROOT env. See SPEC §3.2.1.
 
 inject_into() {
   local target="$1"
@@ -10,11 +17,18 @@ inject_into() {
 
   mkdir -p "$target/.claude/agents" "$target/.claude/commands"
 
-  # settings.local.json — Claude Code's this-clone-only slot
+  # Per-project binding symlink (#312, Directive #311): lets hooks resolve the
+  # canonical shell root via $CLAUDE_PROJECT_DIR/.claude/eng-shell-root, so a
+  # plain `claude` works with NO global CLAUDE_ENG_SHELL_ROOT env. Idempotent.
+  ln -sfn "$CLAUDE_ENG_SHELL_ROOT" "$target/.claude/eng-shell-root"
+
+  # settings.local.json — Claude Code's this-clone-only slot. Points at the
+  # target-facing settings.injected.json, whose hook commands resolve via the
+  # binding symlink above; the shell's own settings.json stays env-based (dogfood).
   if [ -e "$target/.claude/settings.local.json" ] && [ ! -L "$target/.claude/settings.local.json" ]; then
     echo "WARN: $target/.claude/settings.local.json exists (real file). Shell settings not injected." >&2
   else
-    ln -sfn "$CLAUDE_ENG_SHELL_ROOT/.claude/settings.json" "$target/.claude/settings.local.json"
+    ln -sfn "$CLAUDE_ENG_SHELL_ROOT/.claude/settings.injected.json" "$target/.claude/settings.local.json"
   fi
 
   # agents / commands — skip with warning if a same-named asset already exists
@@ -41,6 +55,7 @@ inject_into() {
     if ! grep -qxF '.claude/settings.local.json' "$excl"; then
       printf '\n# claude-eng-shell injection\n.claude/settings.local.json\n' >> "$excl"
     fi
+    grep -qxF '.claude/eng-shell-root' "$excl" || printf '.claude/eng-shell-root\n' >> "$excl"
   fi
 
   # Record in registry
