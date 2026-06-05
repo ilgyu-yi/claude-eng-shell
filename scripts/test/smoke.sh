@@ -7670,6 +7670,23 @@ else
 fi
 rm -rf "$S84_CLI" "$S84_CLI2"
 
+# 84g: hook-context back-compat read-floor — a target registered before #316
+# (legacy shared registry only, NO per-project eng-state/registry.txt) still
+# enforces: in_scope falls back to the legacy shared registry even with
+# CLAUDE_PROJECT_DIR set (where argless eng_registry_file points per-project).
+S84_BC=$(cd "$(mktemp -d)" && pwd -P)
+S84_BC_ROOT=$(cd "$(mktemp -d)" && pwd -P)
+mkdir -p "$S84_BC_ROOT/.claude/state"
+printf '%s\n' "$S84_BC" > "$S84_BC_ROOT/.claude/state/registry.txt"   # legacy shared only
+if ( cd "$S84_BC"; export CLAUDE_ENG_SHELL_ROOT="$S84_BC_ROOT"; export CLAUDE_PROJECT_DIR="$S84_BC"
+     . "$SHELL_ROOT/.claude/hooks/hookrt.sh"; . "$SHELL_ROOT/.claude/hooks/helpers/cwd_guard.sh"
+     [ ! -f "$S84_BC/.claude/eng-state/registry.txt" ] && in_scope ); then
+  ok "84g: hook-context back-compat — pre-#316 target enforces via legacy floor (#316)"
+else
+  ng "84g: pre-#316 target (legacy-only registry) lost hook enforcement (#316)"
+fi
+rm -rf "$S84_BC" "$S84_BC_ROOT"
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"
