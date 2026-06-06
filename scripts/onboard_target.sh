@@ -147,7 +147,14 @@ if [ -n "$DRY_RUN" ]; then
 else
   cp "$SUBSTRATE_ROOT/ISSUE_TEMPLATE/"*.yml "$TARGET_GITHUB/ISSUE_TEMPLATE/"
   cp "$SUBSTRATE_ROOT/workflows/"*.yml "$TARGET_GITHUB/workflows/"
-  echo "  copied 6 ISSUE_TEMPLATE files + 5 workflow files into $TARGET_GITHUB/"
+  # Resolver helper(s) shipped alongside the workflows so the post-merge workflow
+  # can source them after actions/checkout (#335). Guarded so an absent *.sh does
+  # not copy a literal glob.
+  for sh in "$SUBSTRATE_ROOT/workflows/"*.sh; do
+    [ -e "$sh" ] || break
+    cp "$sh" "$TARGET_GITHUB/workflows/"
+  done
+  echo "  copied ISSUE_TEMPLATE + workflow files (incl. resolver helper) into $TARGET_GITHUB/"
 fi
 
 # Open a PR if there are changes. Idempotent: skip if no diff.

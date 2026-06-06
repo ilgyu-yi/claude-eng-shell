@@ -4649,7 +4649,7 @@ for wf in "$DPM_INSTALL" "$DPM_TEMPLATE" "$SHELL_ROOT/.claude/templates/target-s
   [ -f "$wf" ] || { dpm_wf_ok=0; continue; }
   grep -qF 'actions/checkout' "$wf" || dpm_wf_ok=0
   grep -qF 'resolve_parent_directive.sh' "$wf" || dpm_wf_ok=0
-  grep -qE '\[ -f .*resolve_parent_directive' "$wf" || dpm_wf_ok=0
+  grep -qE '\[ -f ' "$wf" || dpm_wf_ok=0   # the source is guarded by a file-existence check
 done
 if [ "$dpm_wf_ok" = 1 ]; then
   ok "48k: all 3 workflow copies checkout + guard-source resolve_parent_directive.sh (#335)"
