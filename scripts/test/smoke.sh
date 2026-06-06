@@ -7926,7 +7926,17 @@ printf '%s' "$(s88_run "$S88_C")" | grep -q 'WARN binding-health' \
   && ng "88c: non-injected should be silent (#334)" \
   || ok "88c: non-injected dir → silent (#334)"
 
-rm -rf "$S88_FAKE" "$S88_STUB" "$S88_VALIDROOT" "$S88_A" "$S88_B" "$S88_C"
+# 88d: injected + DANGLING eng-shell-root (symlink to a missing target) → warn
+# (the subtle half of `! -e`, which follows the link).
+S88_D=$(cd "$(mktemp -d)" && pwd -P); mkdir -p "$S88_D/.claude"
+ln -sfn /dev/null "$S88_D/.claude/settings.local.json"
+ln -sfn "$S88_D/.claude/nonexistent-binding-target-$$" "$S88_D/.claude/eng-shell-root"
+s88_reg "$S88_D"
+printf '%s' "$(s88_run "$S88_D")" | grep -q 'WARN binding-health' \
+  && ok "88d: injected + dangling binding → warn (#334)" \
+  || ng "88d: should warn on dangling binding (#334)"
+
+rm -rf "$S88_FAKE" "$S88_STUB" "$S88_VALIDROOT" "$S88_A" "$S88_B" "$S88_C" "$S88_D"
 
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
