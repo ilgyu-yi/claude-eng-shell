@@ -30,7 +30,7 @@ on:
 permissions:
   issues: write
   contents: read
-  pull-requests: read
+  pull-requests: write   # the bare-Refs warn step posts a PR comment (#337)
 
 jobs:
   reflect:
