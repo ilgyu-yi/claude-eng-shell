@@ -11,6 +11,9 @@ PR-ready is the autonomy ceiling **by default** (`attended` mode). The `unattend
 
 An optional **Initiative** tier sits above Directives: a planning artifact the shell **consumes, not authors** (`/consume-initiative` extracts Directives from it; `/initiative-feedback` posts comments back). Initiative Issues are read-only to the shell — see SPEC §1.7 for the full `Initiative → Directive → Execution` hierarchy and the three initiative matchers (`label-parent-consistency` mutual-exclusivity + parent-XOR, `initiative-readonly`) in §6.1.
 
+## Communication language vs work language
+The conversation with the human (**communication language**) and the language of durable repo artifacts (**work language**) are separate channels (SPEC §5.7.2, Directive #322). Chat replies stay in the user's language; **all durable artifacts** — commit messages, PR titles/bodies, issue/directive/execution bodies, acceptance criteria, changelog fragments, shell-authored code comments, audit `reason` text — are authored in the **work language**, resolved by `resolve_work_lang` (`.claude/hooks/helpers/work_lang.sh`): `$CLAUDE_ENG_WORK_LANG` → `.claude/state/work-lang` (cwd-relative) → default `en`. Any language code is accepted (not ko/en-hardcoded). **Before authoring any artifact** (after the conversation concludes), recast the task context into the work language and write every work-language surface from that recast — do not transliterate the chat. Unset → `en` (today's behavior).
+
 ## Work order: Doc → Test → Code
 1. **Doc** — Write the behavior/contract to be changed into the SSOT (MISSION, README, CLAUDE.md, ARCHITECTURE, ADR) first.
 2. **Test** — Translate the doc into a failing test. Confirm the intended failure.
