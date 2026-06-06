@@ -3,9 +3,11 @@
 # Installed into target repos at .github/workflows/dir-mode-post-merge.yml
 # by scripts/setup_project.sh (future work) or /onboard.
 #
-# Purpose (SPEC §5.7, §5.15; Directive #61):
-#   When a PR merges, parse the closed Issue's body for `Parent Directive: #N`.
-#   If found, post a single hook-enforced reflection comment on the parent
+# Purpose (SPEC §5.7, §5.15; Directive #61, #335):
+#   When a PR merges, resolve the parent Directive of its closing Issues via the
+#   sourced helper resolve_parent_directive.sh (label-aware climb to the first
+#   `directive`-labelled ancestor — depth-cap 2, cycle guard, fail-soft).
+#   If one resolves, post a single hook-enforced reflection comment on the parent
 #   Directive Issue. The comment is the canonical audit surface for events
 #   the Action emits — it doubles as the `directive-exec-count` and
 #   `directive-reflect` audit records that /ship step 10.5 and /reflect
@@ -35,6 +37,8 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
+      - name: Check out repository (for the resolver helper)
+        uses: actions/checkout@v4
       - name: Resolve parent Directive from closing issue bodies
         id: resolve
         env:
@@ -43,27 +47,18 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # No actions/checkout step — the workflow only uses gh API. Every gh
-          # call carries --repo so it doesn't try to read git context from the
-          # runner's cwd (which has no .git directory).
-          # Fetch closing-issue numbers from the merged PR.
-          closing=$(gh pr view "$PR_NUM" --repo "$REPO" --json closingIssuesReferences \
-            --jq '.closingIssuesReferences[].number')
-          directive=""
-          exec_issue=""
-          for n in $closing; do
-            body=$(gh issue view "$n" --repo "$REPO" --json body --jq .body)
-            if [[ "$body" =~ ^Parent\ Directive:\ \#([0-9]+) ]]; then
-              directive="${BASH_REMATCH[1]}"
-              exec_issue="$n"
-              break
-            fi
-          done
-          if [ -n "$directive" ]; then
-            {
-              echo "directive=$directive"
-              echo "exec_issue=$exec_issue"
-            } >> "$GITHUB_OUTPUT"
+          # actions/checkout (above) makes the resolver helper readable. The
+          # resolution — label-aware climb to the first `directive`-labelled
+          # ancestor (#335) — lives in a sourced, CI-shellchecked, smoke-tested
+          # helper rather than inline run-block bash. Its gh calls still carry
+          # --repo so they stay independent of the runner's cwd git context.
+          RESOLVER=".github/workflows/resolve_parent_directive.sh"
+          if [ -f "$RESOLVER" ]; then
+            # shellcheck source=/dev/null
+            . "$RESOLVER"
+            resolve_parent_directive "$PR_NUM" "$REPO" >> "$GITHUB_OUTPUT" || true
+          else
+            echo "resolve: helper $RESOLVER not found — skipping reflection (no-op)" >&2
           fi
 
       - name: Post hook-enforced reflection (idempotent)

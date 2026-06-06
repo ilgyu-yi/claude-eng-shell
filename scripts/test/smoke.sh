@@ -4504,6 +4504,159 @@ else
   fi
 fi
 
+# ---------- 48j. label-aware reflection resolver helper (#335) ----------
+# The post-merge resolver used to post to the FIRST `Parent Directive: #N`
+# marker among a PR's closing issues without checking N is `directive`-labelled,
+# so nested-umbrella work mis-targeted the umbrella. #335 extracts the resolution
+# into a sourceable, smoke-executed helper that climbs to the first
+# `directive`-labelled ancestor (depth-cap 2, cycle guard, fail-soft). Three
+# byte-identical copies: canonical scripts/lib + this-repo .github/workflows
+# runtime + target-substrate (shipped into onboarded targets).
+DPM_RESOLVER_CANON="$SHELL_ROOT/scripts/lib/resolve_parent_directive.sh"
+DPM_RESOLVER_INSTALL="$SHELL_ROOT/.github/workflows/resolve_parent_directive.sh"
+DPM_RESOLVER_TARGETSUB="$SHELL_ROOT/.claude/templates/target-substrate/workflows/resolve_parent_directive.sh"
+
+if [ ! -f "$DPM_RESOLVER_CANON" ]; then
+  ng "48j: scripts/lib/resolve_parent_directive.sh missing (#335)"
+else
+  RPD_DIR=$(mktemp -d)
+  RPD_SHIM="$RPD_DIR/bin"
+  RPD_STATE="$RPD_DIR/state"
+  mkdir -p "$RPD_SHIM" "$RPD_STATE"
+
+  # Fake gh: returns the post-`--jq` values the resolver expects. Closing list,
+  # per-issue body, and per-issue labels are keyed by fixture files in RPD_STATE.
+  cat > "$RPD_SHIM/gh" <<'SHIM'
+#!/bin/sh
+args="$*"
+case "$args" in
+  *"pr view"*closingIssuesReferences*)
+    [ -f "$RPD_STATE/closing" ] && cat "$RPD_STATE/closing"
+    exit 0 ;;
+  *"issue view"*labels*)
+    n=$(printf '%s\n' "$args" | sed -nE 's/.*issue view ([0-9]+).*/\1/p')
+    [ -n "$n" ] && [ -f "$RPD_STATE/labels_$n" ] && cat "$RPD_STATE/labels_$n"
+    exit 0 ;;
+  *"issue view"*body*)
+    n=$(printf '%s\n' "$args" | sed -nE 's/.*issue view ([0-9]+).*/\1/p')
+    [ -n "$n" ] && [ -f "$RPD_STATE/body_$n" ] && cat "$RPD_STATE/body_$n"
+    exit 0 ;;
+esac
+exit 0
+SHIM
+  chmod +x "$RPD_SHIM/gh"
+
+  rpd_reset() { rm -f "$RPD_STATE"/closing "$RPD_STATE"/body_* "$RPD_STATE"/labels_* 2>/dev/null || true; }
+  rpd_call() {
+    PATH="$RPD_SHIM:$PATH" RPD_STATE="$RPD_STATE" \
+      bash -c '. "$1"; resolve_parent_directive "$2" "$3"' _ "$DPM_RESOLVER_CANON" "$1" "mock/repo" 2>/dev/null
+  }
+
+  # Case 1 — direct execution → Directive (the common case; resolves at hop 1).
+  rpd_reset
+  printf '11\n' > "$RPD_STATE/closing"
+  printf 'Parent Directive: #20\n' > "$RPD_STATE/body_11"
+  printf 'directive\n' > "$RPD_STATE/labels_20"
+  out=$(rpd_call 901)
+  if printf '%s' "$out" | grep -qx 'directive=20' && printf '%s' "$out" | grep -qx 'exec_issue=11'; then
+    ok "48j-1: direct execution resolves to its Directive (#335)"
+  else
+    ng "48j-1: direct execution mis-resolved: '$out' (#335)"
+  fi
+
+  # Case 2 — REPRODUCTION: nested umbrella. The closing issue points at an
+  # umbrella (#30, not directive-labelled) that itself points at the Directive
+  # (#40). Must climb PAST the umbrella to #40, not stop at #30.
+  rpd_reset
+  printf '12\n' > "$RPD_STATE/closing"
+  printf 'Parent Directive: #30\n' > "$RPD_STATE/body_12"
+  printf 'execution\n' > "$RPD_STATE/labels_30"
+  printf 'Parent Directive: #40\n' > "$RPD_STATE/body_30"
+  printf 'directive\n' > "$RPD_STATE/labels_40"
+  out=$(rpd_call 902)
+  if printf '%s' "$out" | grep -qx 'directive=40'; then
+    ok "48j-2: nested umbrella climbs to the grandparent Directive (#335)"
+  else
+    ng "48j-2: nested umbrella mis-targeted (expected directive=40): '$out' (#335)"
+  fi
+
+  # Case 3 — cycle (no directive in the chain) → empty, no hang (depth-cap +
+  # visited guard).
+  rpd_reset
+  printf '13\n' > "$RPD_STATE/closing"
+  printf 'Parent Directive: #50\n' > "$RPD_STATE/body_13"
+  printf 'execution\n' > "$RPD_STATE/labels_50"
+  printf 'Parent Directive: #60\n' > "$RPD_STATE/body_50"
+  printf 'execution\n' > "$RPD_STATE/labels_60"
+  printf 'Parent Directive: #50\n' > "$RPD_STATE/body_60"
+  out=$(rpd_call 903)
+  if ! printf '%s' "$out" | grep -q 'directive='; then
+    ok "48j-3: cyclic non-directive chain resolves to nothing (#335)"
+  else
+    ng "48j-3: cyclic chain wrongly resolved: '$out' (#335)"
+  fi
+
+  # Case 4 — non-directive dead-end (chain ends at a non-directive issue with no
+  # further marker) → empty.
+  rpd_reset
+  printf '14\n' > "$RPD_STATE/closing"
+  printf 'Parent Directive: #70\n' > "$RPD_STATE/body_14"
+  printf 'execution\n' > "$RPD_STATE/labels_70"
+  printf 'no marker here\n' > "$RPD_STATE/body_70"
+  out=$(rpd_call 904)
+  if ! printf '%s' "$out" | grep -q 'directive='; then
+    ok "48j-4: non-directive dead-end resolves to nothing (#335)"
+  else
+    ng "48j-4: dead-end wrongly resolved: '$out' (#335)"
+  fi
+
+  # 48j-sync: the three resolver copies are byte-identical (cmp-lock, the §48f
+  # discipline applied to the helper).
+  if [ -f "$DPM_RESOLVER_INSTALL" ] && [ -f "$DPM_RESOLVER_TARGETSUB" ] \
+     && cmp -s "$DPM_RESOLVER_CANON" "$DPM_RESOLVER_INSTALL" \
+     && cmp -s "$DPM_RESOLVER_CANON" "$DPM_RESOLVER_TARGETSUB"; then
+    ok "48j-sync: 3 resolver copies (scripts/lib + .github/workflows + target-substrate) byte-identical (#335)"
+  else
+    ng "48j-sync: resolver copies missing or drifted (#335)"
+  fi
+
+  # 48j-repo: every gh call in the helper carries --repo (the §48g invariant now
+  # that the gh calls live in the helper, not the run-block).
+  hgh=$(grep -cE '\bgh[[:space:]]+(pr|issue)\b' "$DPM_RESOLVER_CANON" 2>/dev/null || echo 0)
+  hghrepo=$(grep -cE '\bgh[[:space:]]+(pr|issue)\b.*--repo' "$DPM_RESOLVER_CANON" 2>/dev/null || echo 0)
+  if [ "$hgh" -gt 0 ] && [ "$hgh" = "$hghrepo" ]; then
+    ok "48j-repo: all $hgh helper gh calls carry --repo (#335)"
+  else
+    ng "48j-repo: $hgh helper gh calls, only $hghrepo carry --repo (#335)"
+  fi
+
+  # 48j-noop: the helper emits a visible no-op note when nothing resolves
+  # (today's inline resolver was silent).
+  if grep -qiE 'no .*directive|no-op|nothing to' "$DPM_RESOLVER_CANON"; then
+    ok "48j-noop: helper logs a visible no-op on empty resolution (#335)"
+  else
+    ng "48j-noop: helper has no visible no-op log (#335)"
+  fi
+
+  rm -rf "$RPD_DIR" 2>/dev/null || true
+fi
+
+# 48k: all three dir-mode-post-merge.yml copies source the helper after an
+# actions/checkout, guard the source with `[ -f ]` (missing helper degrades to
+# no-reflection, not a failed Action), and no longer claim "No actions/checkout".
+dpm_wf_ok=1
+for wf in "$DPM_INSTALL" "$DPM_TEMPLATE" "$SHELL_ROOT/.claude/templates/target-substrate/workflows/dir-mode-post-merge.yml"; do
+  [ -f "$wf" ] || { dpm_wf_ok=0; continue; }
+  grep -qF 'actions/checkout' "$wf" || dpm_wf_ok=0
+  grep -qF 'resolve_parent_directive.sh' "$wf" || dpm_wf_ok=0
+  grep -qE '\[ -f ' "$wf" || dpm_wf_ok=0   # the source is guarded by a file-existence check
+done
+if [ "$dpm_wf_ok" = 1 ]; then
+  ok "48k: all 3 workflow copies checkout + guard-source resolve_parent_directive.sh (#335)"
+else
+  ng "48k: a workflow copy missing checkout / guarded source of the resolver helper (#335)"
+fi
+
 # ---------- 49. Agent files have valid loadable frontmatter (#64 / Directive #62) ----------
 # Claude Code enumerates subagent_type values from .claude/agents/*.md at
 # session start (SPEC §4.9.3). A broken agent file means the harness silently
@@ -5937,13 +6090,14 @@ for f in ISSUE_TEMPLATE/config.yml ISSUE_TEMPLATE/directive-proposal.yml \
          ISSUE_TEMPLATE/bug-report.yml ISSUE_TEMPLATE/discussion.yml \
          workflows/auto-status-proposed.yml workflows/auto-clear-awaiting-author.yml \
          workflows/issues-to-project-mirror.yml \
-         workflows/dir-mode-post-merge.yml workflows/check-changelog.yml; do
+         workflows/dir-mode-post-merge.yml workflows/check-changelog.yml \
+         workflows/resolve_parent_directive.sh; do
   [ -f "$S63_SUB/$f" ] && s63a_count=$((s63a_count + 1))
 done
-if [ "$s63a_count" = 11 ]; then
-  ok "63a: target-substrate canonical-source has 11 files (6 ISSUE_TEMPLATE + 5 workflows) (#118 + #133 + #180)"
+if [ "$s63a_count" = 12 ]; then
+  ok "63a: target-substrate canonical-source has 12 files (6 ISSUE_TEMPLATE + 5 workflows + resolver helper) (#118 + #133 + #180 + #335)"
 else
-  ng "63a: target-substrate canonical-source missing files: expected 11, found $s63a_count (#118 + #133 + #180)"
+  ng "63a: target-substrate canonical-source missing files: expected 12, found $s63a_count (#118 + #133 + #180 + #335)"
 fi
 
 # §63b: /onboard-dir-mode skill file exists with tiered procedure.
