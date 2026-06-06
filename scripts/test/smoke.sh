@@ -4657,6 +4657,190 @@ else
   ng "48k: a workflow copy missing checkout / guarded source of the resolver helper (#335)"
 fi
 
+# ---------- 48m. bare-Refs-to-default §10.5 detector (#337) ----------
+# Recurrence-prevention for the #92 leak: directive-scoped work merged to the
+# live default branch with an EMPTY closing set (bare `Refs #N`, no `Closes`)
+# silently deprives the parent Directive of a reflection. The post-merge
+# workflow runs detect_bare_refs_directive (sibling of resolve_parent_directive,
+# reusing its extracted depth-2 climb) and posts an idempotent warn comment.
+DBR_CANON="$SHELL_ROOT/scripts/lib/detect_bare_refs_directive.sh"
+DBR_INSTALL="$SHELL_ROOT/.github/workflows/detect_bare_refs_directive.sh"
+DBR_TARGETSUB="$SHELL_ROOT/.claude/templates/target-substrate/workflows/detect_bare_refs_directive.sh"
+
+if [ ! -f "$DBR_CANON" ]; then
+  ng "48m: scripts/lib/detect_bare_refs_directive.sh missing (#337)"
+else
+  DBR_DIR=$(mktemp -d)
+  DBR_SHIM="$DBR_DIR/bin"
+  DBR_STATE="$DBR_DIR/state"
+  mkdir -p "$DBR_SHIM" "$DBR_STATE"
+
+  # Fake gh: post-`--jq` values keyed by fixture files. Covers the detector's
+  # repo/pr/issue reads plus the resolver climb it reuses.
+  cat > "$DBR_SHIM/gh" <<'SHIM'
+#!/bin/sh
+args="$*"
+case "$args" in
+  *"repo view"*defaultBranchRef*)
+    [ -f "$DBR_STATE/default" ] && cat "$DBR_STATE/default"
+    exit 0 ;;
+  *"pr view"*baseRefName*)
+    p=$(printf '%s\n' "$args" | sed -nE 's/.*pr view ([0-9]+).*/\1/p')
+    [ -n "$p" ] && [ -f "$DBR_STATE/base_$p" ] && cat "$DBR_STATE/base_$p"
+    exit 0 ;;
+  *"pr view"*closingIssuesReferences*)
+    p=$(printf '%s\n' "$args" | sed -nE 's/.*pr view ([0-9]+).*/\1/p')
+    [ -n "$p" ] && [ -f "$DBR_STATE/closing_$p" ] && cat "$DBR_STATE/closing_$p"
+    exit 0 ;;
+  *"pr view"*body*)
+    p=$(printf '%s\n' "$args" | sed -nE 's/.*pr view ([0-9]+).*/\1/p')
+    [ -n "$p" ] && [ -f "$DBR_STATE/prbody_$p" ] && cat "$DBR_STATE/prbody_$p"
+    exit 0 ;;
+  *"issue view"*labels*)
+    n=$(printf '%s\n' "$args" | sed -nE 's/.*issue view ([0-9]+).*/\1/p')
+    [ -n "$n" ] && [ -f "$DBR_STATE/labels_$n" ] && cat "$DBR_STATE/labels_$n"
+    exit 0 ;;
+  *"issue view"*body*)
+    n=$(printf '%s\n' "$args" | sed -nE 's/.*issue view ([0-9]+).*/\1/p')
+    [ -n "$n" ] && [ -f "$DBR_STATE/body_$n" ] && cat "$DBR_STATE/body_$n"
+    exit 0 ;;
+esac
+exit 0
+SHIM
+  chmod +x "$DBR_SHIM/gh"
+
+  dbr_reset() {
+    rm -f "$DBR_STATE"/default "$DBR_STATE"/base_* "$DBR_STATE"/closing_* \
+          "$DBR_STATE"/prbody_* "$DBR_STATE"/labels_* "$DBR_STATE"/body_* 2>/dev/null || true
+  }
+  dbr_call() {
+    PATH="$DBR_SHIM:$PATH" DBR_STATE="$DBR_STATE" \
+      bash -c '. "$1"; detect_bare_refs_directive "$2" "$3"' _ "$DBR_CANON" "$1" "mock/repo" 2>/dev/null
+  }
+
+  # Case 1 — FLAG: directive-scoped Refs, empty closing set, base==default.
+  dbr_reset
+  printf 'main\n' > "$DBR_STATE/default"
+  printf 'main\n' > "$DBR_STATE/base_801"
+  : > "$DBR_STATE/closing_801"            # empty closing set
+  printf 'Some work. Refs #20\n' > "$DBR_STATE/prbody_801"
+  printf 'directive\n' > "$DBR_STATE/labels_20"
+  out=$(dbr_call 801)
+  if printf '%s' "$out" | grep -q 'flag='; then
+    ok "48m-1: bare directive Refs to default with empty closing set is flagged (#337)"
+  else
+    ng "48m-1: flagged shape not detected: '$out' (#337)"
+  fi
+
+  # Case 2 — FLAG via climb: Refs target is an Execution Issue parented under a
+  # Directive (reuses resolve_parent_directive's depth-2 climb).
+  dbr_reset
+  printf 'main\n' > "$DBR_STATE/default"
+  printf 'main\n' > "$DBR_STATE/base_805"
+  : > "$DBR_STATE/closing_805"
+  printf 'Refs #40\n' > "$DBR_STATE/prbody_805"
+  printf 'execution\n' > "$DBR_STATE/labels_40"
+  printf 'Parent Directive: #50\n' > "$DBR_STATE/body_40"
+  printf 'directive\n' > "$DBR_STATE/labels_50"
+  out=$(dbr_call 805)
+  if printf '%s' "$out" | grep -q 'flag='; then
+    ok "48m-2: execution-parented Refs (climb to Directive) is flagged (#337)"
+  else
+    ng "48m-2: execution-parented Refs not detected via climb: '$out' (#337)"
+  fi
+
+  # Case 3 — no flag: Refs target is non-directive (a standalone task, no climb).
+  dbr_reset
+  printf 'main\n' > "$DBR_STATE/default"
+  printf 'main\n' > "$DBR_STATE/base_802"
+  : > "$DBR_STATE/closing_802"
+  printf 'Refs #21\n' > "$DBR_STATE/prbody_802"
+  printf 'task\n' > "$DBR_STATE/labels_21"
+  printf 'no marker\n' > "$DBR_STATE/body_21"
+  out=$(dbr_call 802)
+  if ! printf '%s' "$out" | grep -q 'flag='; then
+    ok "48m-3: non-directive Refs is not flagged (#337)"
+  else
+    ng "48m-3: non-directive Refs wrongly flagged: '$out' (#337)"
+  fi
+
+  # Case 4 — no flag: non-empty closing set (a proper Closes of an Execution Issue).
+  dbr_reset
+  printf 'main\n' > "$DBR_STATE/default"
+  printf 'main\n' > "$DBR_STATE/base_803"
+  printf '30\n' > "$DBR_STATE/closing_803"   # non-empty
+  printf 'Refs #20\n' > "$DBR_STATE/prbody_803"
+  printf 'directive\n' > "$DBR_STATE/labels_20"
+  out=$(dbr_call 803)
+  if ! printf '%s' "$out" | grep -q 'flag='; then
+    ok "48m-4: non-empty closing set is not flagged (#337)"
+  else
+    ng "48m-4: non-empty closing set wrongly flagged: '$out' (#337)"
+  fi
+
+  # Case 5 — no flag: base != default branch (legit §10.5 topic-branch sub-task PR).
+  dbr_reset
+  printf 'main\n' > "$DBR_STATE/default"
+  printf 'experiment/foo\n' > "$DBR_STATE/base_804"
+  : > "$DBR_STATE/closing_804"
+  printf 'Refs #20\n' > "$DBR_STATE/prbody_804"
+  printf 'directive\n' > "$DBR_STATE/labels_20"
+  out=$(dbr_call 804)
+  if ! printf '%s' "$out" | grep -q 'flag='; then
+    ok "48m-5: non-default base (topic-branch sub-task) is not flagged (#337)"
+  else
+    ng "48m-5: non-default base wrongly flagged: '$out' (#337)"
+  fi
+
+  # Case 6 — fail-soft: default branch unresolvable (gh error) → no flag, no abort.
+  dbr_reset
+  printf 'main\n' > "$DBR_STATE/base_806"     # no `default` fixture → empty
+  : > "$DBR_STATE/closing_806"
+  printf 'Refs #20\n' > "$DBR_STATE/prbody_806"
+  printf 'directive\n' > "$DBR_STATE/labels_20"
+  out=$(dbr_call 806)
+  if ! printf '%s' "$out" | grep -q 'flag='; then
+    ok "48m-6: unresolvable default branch fails soft (no flag) (#337)"
+  else
+    ng "48m-6: fail-soft path wrongly flagged: '$out' (#337)"
+  fi
+
+  # 48m-sync: the three detector copies are byte-identical (cmp-lock).
+  if [ -f "$DBR_INSTALL" ] && [ -f "$DBR_TARGETSUB" ] \
+     && cmp -s "$DBR_CANON" "$DBR_INSTALL" \
+     && cmp -s "$DBR_CANON" "$DBR_TARGETSUB"; then
+    ok "48m-sync: 3 detector copies byte-identical (#337)"
+  else
+    ng "48m-sync: detector copies missing or drifted (#337)"
+  fi
+
+  # 48m-repo: every gh INVOCATION in the detector carries --repo (comment lines,
+  # e.g. a prose reference to a `gh pr merge` hook, are excluded — not calls).
+  dgh=$(grep -E '\bgh[[:space:]]+(pr|issue|repo)\b' "$DBR_CANON" 2>/dev/null | grep -vc '^[[:space:]]*#' || echo 0)
+  dghrepo=$(grep -E '\bgh[[:space:]]+(pr|issue|repo)\b.*--repo' "$DBR_CANON" 2>/dev/null | grep -vc '^[[:space:]]*#' || echo 0)
+  if [ "$dgh" -gt 0 ] && [ "$dgh" = "$dghrepo" ]; then
+    ok "48m-repo: all $dgh detector gh calls carry --repo (#337)"
+  else
+    ng "48m-repo: $dgh detector gh calls, only $dghrepo carry --repo (#337)"
+  fi
+
+  rm -rf "$DBR_DIR" 2>/dev/null || true
+fi
+
+# 48n: all 3 dir-mode-post-merge.yml copies wire the bare-Refs detector + an
+# idempotent warn comment (marker-guarded) (#337).
+dbr_wf_ok=1
+for wf in "$DPM_INSTALL" "$DPM_TEMPLATE" "$SHELL_ROOT/.claude/templates/target-substrate/workflows/dir-mode-post-merge.yml"; do
+  [ -f "$wf" ] || { dbr_wf_ok=0; continue; }
+  grep -qF 'detect_bare_refs_directive.sh' "$wf" || dbr_wf_ok=0
+  grep -qF 'bare-refs-warning pr=#' "$wf" || dbr_wf_ok=0
+done
+if [ "$dbr_wf_ok" = 1 ]; then
+  ok "48n: all 3 workflow copies wire the bare-Refs detector + idempotent warn marker (#337)"
+else
+  ng "48n: a workflow copy missing the bare-Refs detector wiring / warn marker (#337)"
+fi
+
 # ---------- 49. Agent files have valid loadable frontmatter (#64 / Directive #62) ----------
 # Claude Code enumerates subagent_type values from .claude/agents/*.md at
 # session start (SPEC §4.9.3). A broken agent file means the harness silently
@@ -6091,13 +6275,14 @@ for f in ISSUE_TEMPLATE/config.yml ISSUE_TEMPLATE/directive-proposal.yml \
          workflows/auto-status-proposed.yml workflows/auto-clear-awaiting-author.yml \
          workflows/issues-to-project-mirror.yml \
          workflows/dir-mode-post-merge.yml workflows/check-changelog.yml \
-         workflows/resolve_parent_directive.sh; do
+         workflows/resolve_parent_directive.sh \
+         workflows/detect_bare_refs_directive.sh; do
   [ -f "$S63_SUB/$f" ] && s63a_count=$((s63a_count + 1))
 done
-if [ "$s63a_count" = 12 ]; then
-  ok "63a: target-substrate canonical-source has 12 files (6 ISSUE_TEMPLATE + 5 workflows + resolver helper) (#118 + #133 + #180 + #335)"
+if [ "$s63a_count" = 13 ]; then
+  ok "63a: target-substrate canonical-source has 13 files (6 ISSUE_TEMPLATE + 5 workflows + 2 sourced helpers) (#118 + #133 + #180 + #335 + #337)"
 else
-  ng "63a: target-substrate canonical-source missing files: expected 12, found $s63a_count (#118 + #133 + #180 + #335)"
+  ng "63a: target-substrate canonical-source missing files: expected 13, found $s63a_count (#118 + #133 + #180 + #335 + #337)"
 fi
 
 # §63b: /onboard-dir-mode skill file exists with tiered procedure.
