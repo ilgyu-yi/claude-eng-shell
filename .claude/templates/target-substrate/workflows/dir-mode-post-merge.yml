@@ -105,3 +105,54 @@ jobs:
           COMMENT
           )
           gh issue comment "$DIRECTIVE" --repo "$REPO" --body "$comment"
+
+      - name: Detect bare-Refs §10.5 violation (directive work to default, empty closing set)
+        id: bareref
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # actions/checkout (above) makes the detector helper readable. It flags a
+          # PR merged to the live default branch with an empty closing set but a
+          # directive-scoped `Refs #N` (#337, SPEC §10.5) — the #92 leak. Fail-soft;
+          # gh calls inside carry --repo.
+          DETECTOR=".github/workflows/detect_bare_refs_directive.sh"
+          if [ -f "$DETECTOR" ]; then
+            # shellcheck source=/dev/null
+            . "$DETECTOR"
+            detect_bare_refs_directive "$PR_NUM" "$REPO" >> "$GITHUB_OUTPUT" || true
+          else
+            echo "bareref: detector $DETECTOR not found — skipping (no-op)" >&2
+          fi
+
+      - name: Post bare-Refs §10.5 warning on the PR (idempotent)
+        if: steps.bareref.outputs.flag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          FLAG: ${{ steps.bareref.outputs.flag }}
+        run: |
+          set -euo pipefail
+          # Idempotency: skip if the bare-refs-warning marker for this PR already
+          # exists among the PR's comments (mirrors the reflection URL-guard).
+          existing=$(gh pr view "$PR" --repo "$REPO" --json comments \
+            --jq ".comments[] | select(.body | contains(\"bare-refs-warning pr=#$PR\")) | .url" | head -1)
+          if [ -n "$existing" ]; then
+            echo "Already warned: $existing"
+            exit 0
+          fi
+          comment=$(cat <<COMMENT
+          ## SPEC §10.5: directive work merged to the default branch with no closing Execution Issue
+          <!-- bare-refs-warning pr=#${PR} -->
+
+          This PR merged to the default branch carrying directive-scoped \`Refs #${FLAG}\` but an **empty closing set** (no \`Closes #N\`), so no Execution Issue closed and the dir-mode post-merge reflection chain did not fire — the parent Directive received no progress record (SPEC §10.5).
+
+          Recovery: re-open the relevant Execution Issue and land a follow-up that \`Closes\` it, or run \`/reflect ${PR}\` to post the reflection manually.
+
+          Posted by \`.github/workflows/dir-mode-post-merge.yml\` (#337) on \`pull_request.closed\` (merged=true).
+          COMMENT
+          )
+          gh pr comment "$PR" --repo "$REPO" --body "$comment"

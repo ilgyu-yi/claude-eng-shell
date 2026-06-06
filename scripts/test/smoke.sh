@@ -4814,9 +4814,10 @@ SHIM
     ng "48m-sync: detector copies missing or drifted (#337)"
   fi
 
-  # 48m-repo: every gh call in the detector carries --repo.
-  dgh=$(grep -cE '\bgh[[:space:]]+(pr|issue|repo)\b' "$DBR_CANON" 2>/dev/null || echo 0)
-  dghrepo=$(grep -cE '\bgh[[:space:]]+(pr|issue|repo)\b.*--repo' "$DBR_CANON" 2>/dev/null || echo 0)
+  # 48m-repo: every gh INVOCATION in the detector carries --repo (comment lines,
+  # e.g. a prose reference to a `gh pr merge` hook, are excluded — not calls).
+  dgh=$(grep -E '\bgh[[:space:]]+(pr|issue|repo)\b' "$DBR_CANON" 2>/dev/null | grep -vc '^[[:space:]]*#' || echo 0)
+  dghrepo=$(grep -E '\bgh[[:space:]]+(pr|issue|repo)\b.*--repo' "$DBR_CANON" 2>/dev/null | grep -vc '^[[:space:]]*#' || echo 0)
   if [ "$dgh" -gt 0 ] && [ "$dgh" = "$dghrepo" ]; then
     ok "48m-repo: all $dgh detector gh calls carry --repo (#337)"
   else
