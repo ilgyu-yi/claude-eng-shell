@@ -793,6 +793,30 @@ else
   ng "user_prompt_submit still hand-rolls branch summary (#15)"
 fi
 
+# 13d (#318). status_compact surfaces the bound canonical root (`shell-root:`)
+# and the ephemeral-state locality (`state:` = project-local | legacy-shared),
+# the SPEC §5.5 fields that make the §1.7 shared-code/per-project-state model
+# legible in every turn. Drive with CLAUDE_PROJECT_DIR set (hook context) so
+# locality resolves to project-local.
+(
+  cd "$SHELL_ROOT" || exit 1
+  command -v status_compact >/dev/null 2>&1 || exit 1
+  out=$(CLAUDE_PROJECT_DIR="$SHELL_ROOT" status_compact 2>/dev/null)
+  printf '%s' "$out" | grep -q '^shell-root:' \
+    && printf '%s' "$out" | grep -Eq '^state: (project-local|legacy-shared)'
+) && ok "13d: status_compact surfaces shell-root + state locality (#318)" \
+  || ng "13d: status_compact missing shell-root/state fields (#318)"
+
+# 13e (#318). status_json carries the same two fields (parity with compact):
+# .shell_root (string) and .state_locality (project-local|legacy-shared).
+(
+  cd "$SHELL_ROOT" || exit 1
+  command -v status_json >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || exit 1
+  out=$(CLAUDE_PROJECT_DIR="$SHELL_ROOT" status_json 2>/dev/null)
+  printf '%s' "$out" | jq -e '.shell_root and (.state_locality | test("^(project-local|legacy-shared)$"))' >/dev/null 2>&1
+) && ok "13e: status_json carries shell_root + state_locality (parity, #318)" \
+  || ng "13e: status_json missing shell_root/state_locality (#318)"
+
 # ---------- 14. /sync-pr body cache (#16) ----------
 # SPEC §5.4: persistent SHA-256 cache at
 # .claude/state/pr-cache/<owner>__<repo>__pr-<n>.json. pr_cache_check exits
@@ -2450,14 +2474,15 @@ else
   ng "config-toggles: docs/CONFIG.md not found at $CONFIG_MD (#15)"
 fi
 
-# ---------- 37. SessionStart inject-consistency banner (#23) ----------
-# When the shell was injected into a target (settings.local.json is a
-# symlink) but CLAUDE_ENG_SHELL_ROOT is unset (user ran `claude`, not
-# `claude-eng`), SessionStart must emit one stderr warning so the silent
-# no-op state is visible. The check runs *before* session_start.sh's
-# env-guard at lines 4-5; without it every hook silently exits 0.
-# Marker substring locked here: `inject-consistency`. Banner text may
-# evolve so long as that token remains.
+# ---------- 37. SessionStart inject-consistency banner REMOVED (#318) ----------
+# The inject-consistency banner was REMOVED in #318 (Directive #311). Post-#312 a
+# plain `claude` in an injected target (settings.local.json symlink + env unset)
+# is the NORMAL working state — hooks self-locate via the binding symlink and
+# session_start.sh back-fills the env — so the banner only false-fired. And the
+# residual genuine no-op (broken binding) is structurally undetectable from
+# SessionStart: the hook command itself traverses the binding, so a broken
+# binding means session_start.sh never runs and the banner inside it can't fire.
+# So: the banner must NOT appear in any state, and the emitting code must be gone.
 SESS_37_DIR=$(mktemp -d)
 SESS_37_SHELL="$SESS_37_DIR/shell"
 SESS_37_TARGET="$SESS_37_DIR/target"
@@ -2466,69 +2491,37 @@ touch "$SESS_37_SHELL/.claude/settings.json"
 # Mirror inject_into's symlink: target/.claude/settings.local.json → shell/.claude/settings.json
 ln -sfn "$SESS_37_SHELL/.claude/settings.json" "$SESS_37_TARGET/.claude/settings.local.json"
 
-# Stable TMPDIR + session id so the stamp file is deterministic across
-# 37a / 37d.
 SESS_37_TMP="$SESS_37_DIR/tmp"; mkdir -p "$SESS_37_TMP"
-SESS_37_SID="smoke37"
 
 run_37_session_start() {
-  local env_set="$1"   # 'set' | 'unset'
-  local cwd="$2"
+  local cwd="$1"
   (
     unset CLAUDE_ENG_SHELL_ROOT
-    [ "$env_set" = set ] && export CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT"
     export TMPDIR="$SESS_37_TMP"
-    export CLAUDE_SESSION_ID="$SESS_37_SID"
+    export CLAUDE_SESSION_ID="smoke37"
     cd "$cwd" || exit 1
-    # Same intentional swap as post_run at smoke.sh:1023 — caller captures
-    # stdout via $(...); the hook writes to stderr; this order routes
-    # stderr into the captured pipe while discarding hook stdout.
     # shellcheck disable=SC2069
     bash "$SHELL_ROOT/.claude/hooks/session_start.sh" 2>&1 >/dev/null
   )
 }
 
-# 37a (positive): symlink + env unset → banner.
-rm -rf "$SESS_37_TMP/claude-eng-banner."*
-out37a=$(run_37_session_start unset "$SESS_37_TARGET")
+# 37a (runtime): the former false-positive state (symlink + env unset) must now
+# emit NO inject-consistency banner. Anti-vacuity: 37b proves session_start.sh
+# still runs (the banner block is gone from source, not silenced by a crash).
+out37a=$(run_37_session_start "$SESS_37_TARGET")
 if printf '%s' "$out37a" | grep -q 'inject-consistency'; then
-  ok "session-banner: symlink + env unset emits banner (#23)"
+  ng "37: inject-consistency banner should be removed but still fires (#318)"
 else
-  ng "session-banner: symlink + env unset should emit banner (#23)"
+  ok "37: no inject-consistency banner in normal env-unset+injected state (removed, #318)"
 fi
 
-# 37b (env-set negative): symlink + env set → no banner (env tells the
-# shell it knows where it is).
-rm -rf "$SESS_37_TMP/claude-eng-banner."*
-out37b=$(run_37_session_start set "$SESS_37_TARGET")
-if printf '%s' "$out37b" | grep -q 'inject-consistency'; then
-  ng "session-banner: env-set should suppress banner (#23)"
+# 37b (source): the emitting code is gone from session_start.sh (not merely
+# token-silenced). Greps the printf payload `WARN inject-consistency`, so a
+# removal comment mentioning the bare token doesn't vacuously pass.
+if grep -q 'WARN inject-consistency' "$SHELL_ROOT/.claude/hooks/session_start.sh"; then
+  ng "37: session_start.sh still emits the inject-consistency banner (#318)"
 else
-  ok "session-banner: env-set + symlink → no banner (#23)"
-fi
-
-# 37c (no-symlink negative): no symlink + env unset → no banner. A
-# workspace that was never injected must stay quiet (no false positives).
-SESS_37_CLEAN="$SESS_37_DIR/clean"; mkdir -p "$SESS_37_CLEAN/.claude"
-rm -rf "$SESS_37_TMP/claude-eng-banner."*
-out37c=$(run_37_session_start unset "$SESS_37_CLEAN")
-if printf '%s' "$out37c" | grep -q 'inject-consistency'; then
-  ng "session-banner: non-injected dir should not emit banner (#23)"
-else
-  ok "session-banner: no symlink → no banner (#23)"
-fi
-
-# 37d (idempotency): same SID/TMPDIR — second run within the session
-# must suppress the banner (one-per-session debounce).
-rm -rf "$SESS_37_TMP/claude-eng-banner."*
-out37d_first=$(run_37_session_start unset "$SESS_37_TARGET")
-out37d_second=$(run_37_session_start unset "$SESS_37_TARGET")
-first_hit=$(printf '%s' "$out37d_first" | grep -c 'inject-consistency')
-second_hit=$(printf '%s' "$out37d_second" | grep -c 'inject-consistency')
-if [ "$first_hit" = "1" ] && [ "$second_hit" = "0" ]; then
-  ok "session-banner: debounced to once per session (#23)"
-else
-  ng "session-banner: idempotency broken (first=$first_hit second=$second_hit) (#23)"
+  ok "37: inject-consistency banner code removed from session_start.sh (#318)"
 fi
 
 rm -rf "$SESS_37_DIR"
@@ -6045,6 +6038,37 @@ if [ "$s64b_rc" = "0" ] && [ -n "$s64b_out" ] && [ "$s64b_got" = "$s64b_expected
 else
   ng "64b: bin/claude-eng --version did not return shell's VERSION (rc=$s64b_rc expected='$s64b_expected' got='$s64b_got') (#123)"
 fi
+
+# 64c (#318, Directive #311) — `claude-eng list` advisory discovery. Runs before
+# the scope guard (like --version), exits 0 from an unregistered cwd, and unions
+# workspace/* resolved targets with the legacy shared registry, dedup by resolved
+# path, skipping dangling symlinks. Tested against a FAKE shell root (claude-eng
+# self-locates its root from BASH_SOURCE, so a copy under $FAKE/bin resolves to
+# $FAKE), mirroring §9b's fake-root pattern.
+S64C_FAKE=$(cd "$(mktemp -d)" && pwd -P)
+mkdir -p "$S64C_FAKE/bin" "$S64C_FAKE/workspace" "$S64C_FAKE/.claude/state"
+cp "$SHELL_ROOT/bin/claude-eng" "$S64C_FAKE/bin/claude-eng"; chmod +x "$S64C_FAKE/bin/claude-eng"
+S64C_T1=$(cd "$(mktemp -d)" && pwd -P)   # workspace-only
+S64C_T2=$(cd "$(mktemp -d)" && pwd -P)   # in BOTH workspace + legacy (dedup target)
+S64C_T3=$(cd "$(mktemp -d)" && pwd -P)   # legacy-only
+ln -sfn "$S64C_T1" "$S64C_FAKE/workspace/t1"
+ln -sfn "$S64C_T2" "$S64C_FAKE/workspace/t2"
+ln -sfn "$S64C_FAKE/workspace/nonexistent-xyz-$$" "$S64C_FAKE/workspace/dangling"  # dangling
+printf '%s\n%s\n' "$S64C_T2" "$S64C_T3" > "$S64C_FAKE/.claude/state/registry.txt"
+S64C_CWD=$(cd "$(mktemp -d)" && pwd -P)   # unregistered cwd
+s64c_out=$(cd "$S64C_CWD" && "$S64C_FAKE/bin/claude-eng" list 2>/dev/null); s64c_rc=$?
+s64c_t2count=$(printf '%s\n' "$s64c_out" | grep -cxF "$S64C_T2")
+if [ "$s64c_rc" = "0" ] \
+   && printf '%s\n' "$s64c_out" | grep -qxF "$S64C_T1" \
+   && printf '%s\n' "$s64c_out" | grep -qxF "$S64C_T2" \
+   && printf '%s\n' "$s64c_out" | grep -qxF "$S64C_T3" \
+   && [ "$s64c_t2count" = "1" ] \
+   && ! printf '%s\n' "$s64c_out" | grep -q 'dangling\|nonexistent-xyz'; then
+  ok "64c: claude-eng list unions workspace+legacy, dedups, skips dangling, exits 0 from unregistered cwd (#318)"
+else
+  ng "64c: claude-eng list wrong (rc=$s64c_rc t2count=$s64c_t2count out='$(printf '%s' "$s64c_out" | tr '\n' '|')') (#318)"
+fi
+rm -rf "$S64C_FAKE" "$S64C_T1" "$S64C_T2" "$S64C_T3" "$S64C_CWD"
 
 # ---------- 65. /release skill (#131 / Directive #128) ----------
 # §65 exercises scripts/release_consolidate.sh against throwaway git repos.
