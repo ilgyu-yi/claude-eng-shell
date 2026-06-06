@@ -6090,13 +6090,14 @@ for f in ISSUE_TEMPLATE/config.yml ISSUE_TEMPLATE/directive-proposal.yml \
          ISSUE_TEMPLATE/bug-report.yml ISSUE_TEMPLATE/discussion.yml \
          workflows/auto-status-proposed.yml workflows/auto-clear-awaiting-author.yml \
          workflows/issues-to-project-mirror.yml \
-         workflows/dir-mode-post-merge.yml workflows/check-changelog.yml; do
+         workflows/dir-mode-post-merge.yml workflows/check-changelog.yml \
+         workflows/resolve_parent_directive.sh; do
   [ -f "$S63_SUB/$f" ] && s63a_count=$((s63a_count + 1))
 done
-if [ "$s63a_count" = 11 ]; then
-  ok "63a: target-substrate canonical-source has 11 files (6 ISSUE_TEMPLATE + 5 workflows) (#118 + #133 + #180)"
+if [ "$s63a_count" = 12 ]; then
+  ok "63a: target-substrate canonical-source has 12 files (6 ISSUE_TEMPLATE + 5 workflows + resolver helper) (#118 + #133 + #180 + #335)"
 else
-  ng "63a: target-substrate canonical-source missing files: expected 11, found $s63a_count (#118 + #133 + #180)"
+  ng "63a: target-substrate canonical-source missing files: expected 12, found $s63a_count (#118 + #133 + #180 + #335)"
 fi
 
 # §63b: /onboard-dir-mode skill file exists with tiered procedure.
