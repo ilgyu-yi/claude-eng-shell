@@ -7743,6 +7743,62 @@ else
   ng "85c: PR template or target-template source missing (#320)"
 fi
 
+# ---------- 86. work language resolver (EI-1, #323, Directive #322) ----------
+# resolve_work_lang (work_lang.sh) resolves the WORK language of durable artifacts.
+# SPEC §5.7.2: precedence CLAUDE_ENG_WORK_LANG env → .claude/state/work-lang
+# cwd-relative file → default `en`. Any code accepted verbatim (no enum, not
+# ko/en-hardcoded); empty/whitespace → en. Mirrors §11's mode-resolver pattern.
+WL_HELPER="$SHELL_ROOT/.claude/hooks/helpers/work_lang.sh"
+# shellcheck disable=SC1090
+[ -f "$WL_HELPER" ] && . "$WL_HELPER"
+WL_TMP=$(cd "$(mktemp -d)" && pwd -P)
+
+# 86a: unset env + no file → default en.
+s86a=$( cd "$WL_TMP" || exit; unset CLAUDE_ENG_WORK_LANG 2>/dev/null
+        command -v resolve_work_lang >/dev/null 2>&1 && resolve_work_lang 2>/dev/null )
+if [ "$s86a" = "en" ]; then
+  ok "86a: resolve_work_lang default → en (unset env + no file) (#323)"
+else
+  ng "86a: resolve_work_lang default should be en (got '$s86a') (#323)"
+fi
+
+# 86b: env layer.
+s86b=$( cd "$WL_TMP" || exit; CLAUDE_ENG_WORK_LANG=ko resolve_work_lang 2>/dev/null )
+[ "$s86b" = "ko" ] && ok "86b: CLAUDE_ENG_WORK_LANG env layer → ko (#323)" \
+  || ng "86b: env layer wrong (got '$s86b') (#323)"
+
+# 86c: file layer (cwd-relative .claude/state/work-lang).
+mkdir -p "$WL_TMP/.claude/state"; printf 'ja\n' > "$WL_TMP/.claude/state/work-lang"
+s86c=$( cd "$WL_TMP" || exit; unset CLAUDE_ENG_WORK_LANG 2>/dev/null; resolve_work_lang 2>/dev/null )
+[ "$s86c" = "ja" ] && ok "86c: .claude/state/work-lang file layer → ja (#323)" \
+  || ng "86c: file layer wrong (got '$s86c') (#323)"
+
+# 86d: env overrides file.
+s86d=$( cd "$WL_TMP" || exit; CLAUDE_ENG_WORK_LANG=de resolve_work_lang 2>/dev/null )
+[ "$s86d" = "de" ] && ok "86d: env overrides file (#323)" \
+  || ng "86d: env should override file (got '$s86d') (#323)"
+
+# 86e: arbitrary code (non-en, non-ko) returned verbatim — generalization, no hardcoding.
+s86e=$( cd "$WL_TMP" || exit; CLAUDE_ENG_WORK_LANG=pt-BR resolve_work_lang 2>/dev/null )
+[ "$s86e" = "pt-BR" ] && ok "86e: arbitrary code pt-BR returned verbatim (generalization, #323)" \
+  || ng "86e: arbitrary code should pass through (got '$s86e') (#323)"
+
+# 86f: empty/whitespace-only file → en.
+printf '   \n' > "$WL_TMP/.claude/state/work-lang"
+s86f=$( cd "$WL_TMP" || exit; unset CLAUDE_ENG_WORK_LANG 2>/dev/null; resolve_work_lang 2>/dev/null )
+[ "$s86f" = "en" ] && ok "86f: empty/whitespace work-lang file → en (#323)" \
+  || ng "86f: empty file should fall back to en (got '$s86f') (#323)"
+
+# 86g: set -u-safe with everything unset (must not abort).
+s86g=$( set -u; cd "$WL_TMP" || exit; rm -f .claude/state/work-lang; unset CLAUDE_ENG_WORK_LANG 2>/dev/null
+        resolve_work_lang; printf ' rc=%s' "$?" )
+if printf '%s' "$s86g" | grep -q 'rc=0'; then
+  ok "86g: resolve_work_lang set -u-safe, exits 0 (#323)"
+else
+  ng "86g: resolve_work_lang not set -u-safe (got '$s86g') (#323)"
+fi
+rm -rf "$WL_TMP"
+
 # ---------- restore registry ----------
 if [ -n "$ORIG_REG_BAK" ]; then
   mv "$ORIG_REG_BAK" "$ORIG_REG"
