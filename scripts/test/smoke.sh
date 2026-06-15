@@ -8509,6 +8509,27 @@ else
   ng "91: docs/*.md not leading with a SPEC reference:$S91_FAIL (SPEC §9 thin-pointer norm) (#348)"
 fi
 
+# ---------- §92 (#354): SPEC §6.0 wired into the review layer (enforcement-style lens) ----------
+# §6.0's own P4 forbids "guidance with no gate behind it"; the enforcement-style
+# principle must therefore be referenced by the artifact-judging reviewers that
+# apply it, not merely documented. Structural fixed-string grep for the stable
+# token "SPEC §6.0" (not a sentence — robust to future rewordings of the lens);
+# collect every missing reviewer before reporting (no first-failure short-circuit).
+S92_FAIL=""
+for r in issue-reviewer plan-reviewer code-reviewer; do
+  rf="$SHELL_ROOT/.claude/agents/$r.md"
+  if [ -f "$rf" ] && grep -qF 'SPEC §6.0' "$rf"; then
+    : # references the enforcement-style principle — wired
+  else
+    S92_FAIL="$S92_FAIL $r"
+  fi
+done
+if [ -z "$S92_FAIL" ]; then
+  ok "92: issue/plan/code-reviewer prompts reference SPEC §6.0 (enforcement-style lens) (#354)"
+else
+  ng "92: reviewer prompts missing SPEC §6.0 reference:$S92_FAIL (#354)"
+fi
+
 # ---------- results ----------
 echo
 echo "smoke: pass=$PASS fail=$FAIL"
