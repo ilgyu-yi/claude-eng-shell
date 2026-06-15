@@ -25,6 +25,7 @@ Don't rely on anything outside this input.
 - **Doc sync (Phase A reflected?)**
 - **MISSION fit (which MISSION item this serves, or violates)**
 - **Issue acceptance criteria met**
+- **Enforcement-style (SPEC §6.0)** — *only for diffs that add/change a hook, gate, matcher, or standing guidance*: does a new block name its positive alternative, and is the negative/positive face matched to the cost-asymmetry (P1 + P4)? A bare block with no alternative, or new guidance with no gate behind it, is a one-sided regression — flag it.
 
 ## Output
 - One of: `ship` / `ship after fix` / `block (blocker)`.

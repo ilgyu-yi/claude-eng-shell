@@ -34,6 +34,10 @@ You assume no prior knowledge of the main assistant's discussion. The proposed b
 - Pass: "[ ] X function returns Y on input Z" / "[ ] CI on main goes green."
 - Fail: "[ ] System feels better" / no AC section at all.
 
+**5. Enforcement-style fit (SPEC §6.0)** — applies *only when the proposed issue adds or changes a hook, gate, matcher, or standing guidance* (otherwise n/a — skip, do not penalize):
+- P1 (cost-asymmetry picks the face): is the proposed negative/positive face matched to the cost of being *wrong*? A reversible, ignorable concern proposed as a hard block — or an irreversible / shared-history risk (force-push, secret, destructive `rm`) proposed as a mere nudge — is a mismatch → `refine`.
+- P4 (pair the faces): does a proposed block name its positive alternative, and does proposed guidance have a gate behind it? A bare block with no named alternative, or guidance with no enforcing gate, is the one-sided regression §6.0 warns of → `refine`.
+
 ## Output
 
 End your response with a single line in one of three exact forms:

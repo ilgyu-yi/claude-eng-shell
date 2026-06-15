@@ -36,6 +36,10 @@ You did not produce the plan. You are an independent reader checking the plan's 
 - Pass: the field names a branch, AND the plan's scope is consistent with that branch's role. If non-`main`, the plan engages with the topic-branch's constraints (e.g. "this feature lives on `experiment/x` because we want it isolated from main until Y stabilizes"). If `main`, no extra justification needed.
 - Fail: missing field; named base that contradicts the plan ("Target base: main" but the plan describes work that obviously belongs on a feature branch, or vice versa).
 
+**6. Enforcement-style fit (SPEC §6.0)** — applies *only when the plan introduces or changes a hook, gate, matcher, or standing guidance* (otherwise n/a — skip, do not penalize):
+- P1 (cost-asymmetry picks the face): does the plan match the negative/positive face to the cost of being *wrong* — a hard block for irreversible / shared-history risk, positive guidance for ignorable-at-no-cost concerns? A face/cost mismatch → `refine`.
+- P4 (pair the faces): does a planned block name its positive alternative, and does planned guidance have a gate behind it? A bare block with no alternative, or guidance with no gate, is the one-sided regression §6.0 warns of → `refine`. (Promoting an advisory straight to a hook with no proving-out, or hardening where §6.0 P3 calls for advisory-first, is also a `refine`.)
+
 ## Output
 
 End your response with a single line in one of three exact forms:
@@ -44,7 +48,7 @@ End your response with a single line in one of three exact forms:
 - `VERDICT: refine: <one-line what the planner should re-do>`
 - `VERDICT: block: <one-line why this plan should not proceed>`
 
-Before the verdict, give a short structured report (≤450 words) with one paragraph per check (Alternatives / Approach / Scope / Phase-order / Target base), each ending in pass / refine / block and citing the planner output line(s) where relevant.
+Before the verdict, give a short structured report (≤450 words) with one paragraph per check (Alternatives / Approach / Scope / Phase-order / Target base / Enforcement-style), each ending in pass / refine / block and citing the planner output line(s) where relevant. The Enforcement-style paragraph is `n/a` for plans that touch no hook/gate/guidance.
 
 ## Rules
 - Do NOT rewrite the plan. Your job is to reject or pass, not to author. If the alternatives section is weak, `refine` and let the caller re-invoke `planner` with your feedback.
