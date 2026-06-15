@@ -1,0 +1,52 @@
+name: check-toc
+
+# Per-PR SPEC ToC-freshness gate (SPEC §1.3, #347).
+# Fails when SPEC.md's Table of contents is stale relative to its headings,
+# so a stale ToC (which breaks targeted Read --offset navigation) cannot
+# reach the trunk. Skips clean when the repo has no SPEC.md — a project
+# with no external contract legitimately has none (SPEC §1.3 tiering).
+#
+# Pure bash. No third-party Actions (Directive #128 constraint);
+# actions/checkout is the GitHub-shipped git-clone equivalent carved out
+# by Issue #133 Notes. Runs the shipped build_toc.sh, byte-identical to
+# the shell's canonical scripts/build_toc.sh (smoke-guarded, #347).
+#
+# Does NOT self-trigger on its own landing PR — GitHub's pull_request
+# security policy excludes workflow files modified inside a PR from
+# running on that PR. smoke §90 validates structure pre-landing.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - '*-maintenance'
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  toc-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR HEAD
+        uses: actions/checkout@v4
+
+      - name: Check SPEC ToC freshness
+        run: |
+          set -euo pipefail
+
+          if [ ! -f SPEC.md ]; then
+            echo "No SPEC.md in this repo — skipping ToC-freshness check (SPEC §1.3: a project with no external contract has no SPEC)."
+            exit 0
+          fi
+
+          if [ ! -f .github/workflows/build_toc.sh ]; then
+            echo "::error::.github/workflows/build_toc.sh is missing — reinstall the dir-mode substrate (/onboard-dir-mode --tier 3)." >&2
+            exit 1
+          fi
+
+          if ! bash .github/workflows/build_toc.sh --check --spec SPEC.md; then
+            echo "::error::SPEC.md Table of contents is stale. Regenerate it (build_toc.sh) and commit the result in the same PR (SPEC §1.3 — regenerate the ToC in the SPEC-editing commit)." >&2
+            exit 1
+          fi
