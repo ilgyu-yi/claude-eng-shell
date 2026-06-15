@@ -28,6 +28,8 @@ Strict: `feat`, `docs`, external contract / API / schema changes.
 ## Active SSOT maintenance
 Code changes commit with the SSOT items they invalidate or update. If a doc change is intentionally omitted, the commit body says `Docs: n/a — <short reason>`.
 
+`docs/*.md` are **thin pointers**, not parallel content — each leads with a "Full details in SPEC §X" reference and carries no detailed contract content that could drift from SPEC (SPEC §9; smoke-enforced). SPEC is the single source; a digest that restates a contract is a second copy to hand-sync.
+
 ## PR-as-living-doc
 - The PR body is **editorial**, not append-only. Curate right after each commit.
 - Order: **commit → PR body update**. Fact first, then reflection.
