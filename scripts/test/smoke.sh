@@ -4405,16 +4405,17 @@ fi
 # ---------- 48. dir-mode-post-merge workflow contract (#63 / Directive #61) ----------
 # Directive #61 ships a hook-enforced post-merge path. v0's audit + reflection
 # only fired when Claude was the merger; this workflow fires on every
-# pull_request.closed && merged == true event. The template lives shell-side
-# (.claude/templates/) and the dogfooded installation lives in
-# .github/workflows/. §48 locks the contract: file existence, trigger shape,
-# Parent Directive regex consumer, directive-exec-count audit-line token.
+# pull_request.closed && merged == true event. The canonical template lives
+# under target-substrate/workflows/ (the home every substrate workflow shares,
+# #348 removed the pre-target-substrate root copy) and the dogfooded
+# installation lives in .github/workflows/. §48 locks the contract: file
+# existence, trigger shape, Parent Directive regex consumer, exec-count token.
 
-DPM_TEMPLATE="$SHELL_ROOT/.claude/templates/dir-mode-post-merge.yml"
+DPM_TEMPLATE="$SHELL_ROOT/.claude/templates/target-substrate/workflows/dir-mode-post-merge.yml"
 DPM_INSTALL="$SHELL_ROOT/.github/workflows/dir-mode-post-merge.yml"
 
 if [ ! -f "$DPM_TEMPLATE" ]; then
-  ng "48: .claude/templates/dir-mode-post-merge.yml missing (#63)"
+  ng "48: target-substrate/workflows/dir-mode-post-merge.yml missing (#63 / #348)"
 elif [ ! -f "$DPM_INSTALL" ]; then
   ng "48: .github/workflows/dir-mode-post-merge.yml missing (dogfood install) (#63)"
 else
@@ -4455,11 +4456,11 @@ else
     ng "48e: workflow missing idempotency check (#63)"
   fi
 
-  # 48f: dogfood install matches template (byte-for-byte or detectable equivalence).
+  # 48f: dogfood install matches the canonical target-substrate template (byte-for-byte).
   if cmp -s "$DPM_TEMPLATE" "$DPM_INSTALL"; then
-    ok "48f: .github/workflows/ install matches .claude/templates/ source (#63)"
+    ok "48f: .github/workflows/ install matches target-substrate canonical source (#63 / #348)"
   else
-    ng "48f: workflow install drifts from template (#63)"
+    ng "48f: workflow install drifts from the target-substrate template (#63 / #348)"
   fi
 
   # 48h (#329): the reflection stub carries the reflect-stub marker + the corrected
@@ -4475,9 +4476,10 @@ else
     ng "48h: workflow reflection-stub marker/wording wrong (#329)"
   fi
 
-  # 48i (#329): the target-substrate workflow copy (the canonical install source
-  # for onboarded target repos, NOT cmp-locked to the dogfood copy) must carry the
-  # same #329 fix — else targets onboarded post-#329 would install the buggy stub.
+  # 48i (#329): the target-substrate workflow copy is the canonical install source
+  # for onboarded target repos. Post-#348 it is also DPM_TEMPLATE (cmp-locked to the
+  # dogfood copy by 48f), so this is a direct belt-and-suspenders check that the
+  # canonical copy carries the #329 fix — else targets would install the buggy stub.
   DPM_TARGETSUB="$SHELL_ROOT/.claude/templates/target-substrate/workflows/dir-mode-post-merge.yml"
   if [ -f "$DPM_TARGETSUB" ]; then
     if grep -qF 'reflect-stub pr=#' "$DPM_TARGETSUB" \
@@ -5825,7 +5827,7 @@ fi
 s57i_hits=""
 for f in "$SHELL_ROOT/.claude/commands/reflect.md" \
          "$SHELL_ROOT/.github/workflows/dir-mode-post-merge.yml" \
-         "$SHELL_ROOT/.claude/templates/dir-mode-post-merge.yml"; do
+         "$SHELL_ROOT/.claude/templates/target-substrate/workflows/dir-mode-post-merge.yml"; do
   if [ ! -f "$f" ]; then
     # A renamed/deleted target must fail loud, not skip green (vacuity guard).
     s57i_hits="$s57i_hits MISSING:${f##*/}"
@@ -8482,6 +8484,26 @@ bash "$S90G_DIR/scripts/build_toc.sh" --spec "$S90G_DIR/project_spec.md" --check
   && ok "90g: spec.md template ships with a fresh (self-consistent) ToC (#347)" \
   || ng "90g: spec.md template ToC is stale — a verbatim copy would fail check-toc (#347)"
 rm -rf "$S90G_DIR"
+
+# ---------- §91 (#348): docs/*.md are thin pointers — lead with a SPEC reference ----------
+# The docs-thin-pointer norm (SPEC §9): every human-facing docs/*.md digest must
+# lead with a "Full details in SPEC §X" reference (within its first two non-empty
+# lines — the title + the lead-in), so it cannot become a second copy of canonical
+# content that silently drifts from SPEC. Enforcement, not prose (hooks-as-environment).
+S91_FAIL=""
+for d in "$SHELL_ROOT"/docs/*.md; do
+  [ -f "$d" ] || continue
+  if grep -v '^[[:space:]]*$' "$d" | head -2 | grep -q 'SPEC'; then
+    : # leads with a SPEC reference — compliant
+  else
+    S91_FAIL="$S91_FAIL ${d##*/}"
+  fi
+done
+if [ -z "$S91_FAIL" ]; then
+  ok "91: every docs/*.md leads with a SPEC reference (thin-pointer norm, SPEC §9) (#348)"
+else
+  ng "91: docs/*.md not leading with a SPEC reference:$S91_FAIL (SPEC §9 thin-pointer norm) (#348)"
+fi
 
 # ---------- results ----------
 echo
