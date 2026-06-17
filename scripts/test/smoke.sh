@@ -9185,6 +9185,90 @@ else
   ng "99b: detect_stack.sh no longer emits lint-timeout-absent — SPEC §6.1 doc is now stale (#376)"
 fi
 
+# ---------- §100 (#377): generative SPEC↔code consistency guards (Directive #373) ----------
+# Promote the periodic manual sweep (#368) + hand-pinned point assertions (§97)
+# into continuous generative guards over two enumerable contract surfaces, in the
+# §39c/§58a style (pure shell, deterministic, no network). These would have caught
+# the lint-timeout-absent drift (audit category emitted but undocumented) and the
+# /activate-directive forward-ref drift this sweep surfaced.
+
+S100_SPEC="$SHELL_ROOT/SPEC.md"
+S100_HOOKS="$SHELL_ROOT/.claude/hooks"
+S100_CMDS="$SHELL_ROOT/.claude/commands"
+
+# §100a — every LITERAL audit_log category emitted across .claude/hooks/** is
+# documented somewhere in SPEC. Pure-comment lines (leading #) are excluded so
+# prose like "emits an audit_log warn once" is not mis-read as a category;
+# variable-passed categories (audit_log warn "$cat") are inherently un-resolvable
+# statically and are simply not matched by the literal extractor.
+s100_cats=$(grep -rhE 'audit_log[[:space:]]+(info|warn|block|error)[[:space:]]+[A-Za-z]' "$S100_HOOKS" 2>/dev/null \
+  | grep -vE '^[[:space:]]*#' \
+  | grep -oE 'audit_log[[:space:]]+(info|warn|block|error)[[:space:]]+[A-Za-z][A-Za-z0-9_-]+' \
+  | awk '{print $3}' | sort -u)
+s100a_missing=""
+for cat in $s100_cats; do
+  grep -qF "$cat" "$S100_SPEC" || s100a_missing="$s100a_missing $cat"
+done
+if [ -z "$s100a_missing" ]; then
+  ok "100a: every literal audit_log category in .claude/hooks/** is documented in SPEC ($(printf '%s' "$s100_cats" | wc -w | tr -d ' ') cats) (#377)"
+else
+  ng "100a: audit categories emitted but undocumented in SPEC:$s100a_missing (#377)"
+fi
+# §100b — falsifiability: the same extractor+lookup correctly FLAGS a synthetic
+# category that is absent from SPEC (proves 100a is not vacuously passing).
+if grep -qF 'zzz-fake-cat-377' "$S100_SPEC"; then
+  ng "100b: guard self-test tripwire 'zzz-fake-cat-377' unexpectedly present in SPEC (#377)"
+else
+  ok "100b: audit-category guard is falsifiable (a synthetic absent category is detectable) (#377)"
+fi
+
+# §100c — every .claude/commands/*.md command is referenced in SPEC (plain `/cmd`
+# token; backticks optional — /discuss is named in §5.19 prose without them). The
+# substring match only over-counts (e.g. /activate matches inside
+# /activate-directive), which can never cause a false FAIL — it only fails when a
+# command has ZERO SPEC references, the real "command exists, SPEC silent" drift.
+s100c_missing=""
+for f in "$S100_CMDS"/*.md; do
+  cmd="/$(basename "$f" .md)"
+  grep -qF "$cmd" "$S100_SPEC" || s100c_missing="$s100c_missing $cmd"
+done
+if [ -z "$s100c_missing" ]; then
+  ok "100c: every .claude/commands/*.md command is referenced in SPEC (#377)"
+else
+  ng "100c: command files with no SPEC reference:$s100c_missing (#377)"
+fi
+
+# §100d — no command/agent file steers a user to a SPEC-deprecated alias via
+# imperative *forward guidance* (a `Next:` hint or a `via`/`run`/`invoke`/`use`
+# verb immediately preceding the command). Descriptive mentions ("absorbs X",
+# "relocated from X", "X is a deprecated alias") use no such verb and are not
+# flagged. Deprecated set = the §5.12/§5.18 sunset aliases; extend when a new
+# alias is retired. The alias's OWN command file is excluded.
+S100_DEPRECATED="activate-directive triage"   # SPEC §5.12 / §5.18 deprecated aliases
+s100d_hits=""
+for dep in $S100_DEPRECATED; do
+  while IFS= read -r hit; do
+    [ -n "$hit" ] && s100d_hits="$s100d_hits\n$hit"
+  done <<EOF100D
+$(grep -rniE "(Next:|[^a-z](via|run|invoke|use)[^a-z])[^\`]*\`?/$dep\b" "$S100_CMDS" "$SHELL_ROOT/.claude/agents" 2>/dev/null \
+   | grep -vE "commands/$dep\.md")
+EOF100D
+done
+if [ -z "$s100d_hits" ]; then
+  ok "100d: no command/agent forward-guidance steers to a deprecated alias (#377)"
+else
+  ng "100d: forward-guidance to a deprecated alias:$(printf '%b' "$s100d_hits") (#377)"
+fi
+# §100e — falsifiability: the same forward-guidance pattern matches a synthetic
+# `Next: /activate-directive` line (proves 100d is not vacuously passing — this
+# is the exact drift shape #376 redirected).
+if printf 'Next: /activate-directive <N> when ready' \
+   | grep -qiE "(Next:|[^a-z](via|run|invoke|use)[^a-z])[^\`]*\`?/activate-directive\b"; then
+  ok "100e: deprecated-alias forward-guidance guard is falsifiable (#377)"
+else
+  ng "100e: forward-guidance guard fails to flag a synthetic Next:/activate-directive (#377)"
+fi
+
 # ---------- §357 AC1: live shared sinks untouched by the run ----------
 # A smoke run must add ZERO lines to the live audit log and ZERO entries to the
 # live scope registry (MISSION "shared code, per-project state" isolation, #357).
