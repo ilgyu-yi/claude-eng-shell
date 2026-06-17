@@ -35,4 +35,21 @@ if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; th
   printf '[claude-eng-shell] uncommitted changes present. consider /review.\n' >&2
 fi
 
+# Suggest /sync-pr when HEAD has advanced past the last /sync-pr — i.e. commit(s)
+# happened since the PR body was last curated, so its checklist is stale relative
+# to HEAD (SPEC §6.3 second arm). Detection is local (cached last_synced_head vs
+# `git rev-parse HEAD`) behind one `current_pr_number` lookup; this whole block
+# is already gated by the modulo throttle above, so the gh touch runs at most
+# once per N responses. No PR / no cache (never synced) / no gh → silent no-op.
+safe_source "$SHELL_ROOT/.claude/hooks/helpers/gh_state.sh" stop-syncpr || true
+safe_source "$SHELL_ROOT/.claude/hooks/helpers/pr_cache.sh" stop-syncpr || true
+pr_n=$(current_pr_number 2>/dev/null || true)
+if [ -n "$pr_n" ]; then
+  cached_head=$(pr_cache_head "$pr_n" 2>/dev/null || true)
+  cur_head=$(git rev-parse HEAD 2>/dev/null || true)
+  if [ -n "$cached_head" ] && [ -n "$cur_head" ] && [ "$cached_head" != "$cur_head" ]; then
+    printf '[claude-eng-shell] commit(s) since last /sync-pr. consider /sync-pr.\n' >&2
+  fi
+fi
+
 exit 0

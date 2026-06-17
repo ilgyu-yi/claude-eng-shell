@@ -1186,10 +1186,13 @@ rm -rf "$HOOK_TMP"
 # fake repo without gh). pr_cache_head does not exist pre-#375 → these go RED.
 S15S_DIR="$TMP/syncpr"
 mkdir -p "$S15S_DIR"
+# commit.gpgsign=false guards against a developer's global gpgsign=true, which
+# would fail the test identity's signing and leave HEAD unborn (#375).
+S15S_GIT=(git -c commit.gpgsign=false -c user.email=t@t -c user.name=t)
 (
   cd "$S15S_DIR" || exit 1
-  git init -q . && git config user.email t@t && git config user.name t
-  git commit -q --allow-empty -m seed
+  git init -q .
+  "${S15S_GIT[@]}" commit -q --allow-empty -m seed
 ) >/dev/null 2>&1
 # shellcheck disable=SC1091
 . "$SHELL_ROOT/.claude/hooks/helpers/pr_cache.sh"
@@ -1210,7 +1213,7 @@ else
   ng "15s-b: in-sync HEAD wrongly differs from cached (#375)"
 fi
 # §15s-c: out-of-sync — advance HEAD, cached head now differs → nudge condition.
-(cd "$S15S_DIR" && git commit -q --allow-empty -m next) >/dev/null 2>&1
+(cd "$S15S_DIR" && "${S15S_GIT[@]}" commit -q --allow-empty -m next) >/dev/null 2>&1
 new_head=$(cd "$S15S_DIR" && git rev-parse HEAD)
 if [ "$(pr_cache_head 7)" != "$new_head" ]; then
   ok "15s-c: commit since last /sync-pr → out-of-sync condition holds (#375)"
