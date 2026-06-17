@@ -13,6 +13,10 @@
 #   - skip-changelog   — PR-time opt-out for the release-backbone fragment-gate (SPEC §18.6)
 #   - P0 / P1 / P2 / P3 — Directive priority (#185; SPEC §0.4 tier-2 set; the P<N> label
 #                        /file-directive applies is the mirror-readable priority projection)
+#   - initiative:challenged / initiative:completion-requested — initiative-feedback
+#                        projection labels (#359; SPEC §1.7). Applied by the
+#                        initiative-feedback-label CI Action from /initiative-feedback's
+#                        comment markers; read by the orchestrator (claude-orch-shell).
 #
 # Labels v3 relies on but that this script does NOT create (the two tier
 # type-keys are installed inline by onboard_target.sh; the rest are GitHub
@@ -45,5 +49,7 @@ ensure_label "P0"              "B60205" "Priority 0 — drop everything"
 ensure_label "P1"              "D93F0B" "Priority 1 — next"
 ensure_label "P2"              "FBCA04" "Priority 2 — soon"
 ensure_label "P3"              "0E8A16" "Priority 3 — eventually"
+ensure_label "initiative:challenged"          "0052CC" "Execution challenged the parent Initiative; orchestrator re-evaluation requested (projected from /initiative-feedback by CI, #359)"
+ensure_label "initiative:completion-requested" "0052CC" "Execution signals the parent Initiative's termination may be met; orchestrator assessment requested (projected from /initiative-feedback by CI, #359)"
 
 echo "ensure_v3_labels: done."

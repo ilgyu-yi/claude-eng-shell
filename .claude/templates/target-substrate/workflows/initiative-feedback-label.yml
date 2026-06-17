@@ -1,0 +1,52 @@
+name: initiative-feedback-label
+
+# Directive #305 / Issue #359: project /initiative-feedback's published comment
+# markers into machine-consumable labels for the orchestrator (claude-orch-shell).
+# When an issue_comment is created whose body's first line is the H2 marker
+# `## Initiative challenge`, add `initiative:challenged`; `## Initiative completion`
+# adds `initiative:completion-requested`. Any other comment adds no label.
+#
+# Boundary (MISSION "Consuming Initiatives" / SPEC §1.7 initiative-readonly): the
+# label is applied by THIS CI Action — a separate target-repo actor on
+# `issue_comment` — never by eng's runtime. eng still only ever *comments*; this
+# workflow derives a label projection from the comment it published. The comment
+# remains the authoritative finding; the label is a derived signal the
+# orchestrator reads.
+#
+# - Event-driven on `created` only — no history rescan, so a label the planning
+#   layer later removes is not re-added.
+# - Idempotent: `gh issue edit --add-label` is a no-op if the label is present.
+# - No self-trigger loop: adding a label emits `issues.labeled`, not
+#   `issue_comment`, so this workflow does not re-fire itself.
+# - No bot-comment guard by design: the H2 marker is the gate; the label-izer is
+#   meant to fire on eng's published markers regardless of the comment's actor,
+#   and re-applying a present label is a no-op.
+# - The comment body is passed via an `env:` var (never interpolated into the
+#   script) so a crafted comment body cannot inject shell.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  project-marker-to-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Map Initiative-feedback marker to label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          set -eu
+          n="${{ github.event.issue.number }}"
+          first_line=$(printf '%s\n' "$COMMENT_BODY" | head -n 1)
+          case "$first_line" in
+            "## Initiative challenge"*)  label="initiative:challenged" ;;
+            "## Initiative completion"*) label="initiative:completion-requested" ;;
+            *) exit 0 ;;
+          esac
+          gh issue edit "$n" --repo "${{ github.repository }}" --add-label "$label"
