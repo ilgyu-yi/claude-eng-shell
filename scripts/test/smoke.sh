@@ -52,6 +52,12 @@ SMOKE_AUDIT="$SMOKE_STATE/audit/audit.jsonl"
 SMOKE_REG="$SMOKE_STATE/registry.txt"
 mkdir -p "$SMOKE_STATE/audit"
 export ENG_STATE_DIR_OVERRIDE="$SMOKE_STATE"
+# §361 — mark every fixture-fire audit record as test-origin (Directive #356
+# signal 1). Only the exact token `test` flips audit_log's `source` field; a
+# real Bash-tool action cannot inject this into the hook subprocess (SPEC §7),
+# so `source=live` stays the trustworthy default for real sessions. §93's
+# default/forged-value sub-tests locally unset / re-set this.
+export CLAUDE_ENG_AUDIT_SOURCE=test
 
 PASS=0
 FAIL=0
@@ -8666,6 +8672,82 @@ if [ -z "$S92_FAIL" ]; then
   ok "92: issue/plan/code-reviewer prompts reference SPEC §6.0 (enforcement-style lens) (#354)"
 else
   ng "92: reviewer prompts missing SPEC §6.0 reference:$S92_FAIL (#354)"
+fi
+
+# ---------- 93. audit source discriminator + reviewer-reject instrumentation (#361, Directive #356 signals 1+3) ----------
+# All fires here resolve to $SMOKE_AUDIT (the whole-run ENG_STATE_DIR_OVERRIDE),
+# so they do NOT touch the live sinks the §357 backstop (just below) measures.
+# hook_run inherits the process env (only CLAUDE_ENG_SHELL_ROOT is prefix-set),
+# so the global CLAUDE_ENG_AUDIT_SOURCE=test flows through; a subshell that
+# unsets / re-sets it exercises the default + forged-value branches.
+
+# Helper: emit one audit-producing fixture fire and echo the LAST record's
+# .source (eval "ls" → a bypass-suspect warn, a clean audit-emitting fire).
+s93_last_source() {  # echoes the .source of the newest $SMOKE_AUDIT record
+  hook_run 'eval "ls -la"' >/dev/null
+  tail -n 1 "$SMOKE_AUDIT" 2>/dev/null | jq -r '.source // "ABSENT"' 2>/dev/null
+}
+
+if ! command -v jq >/dev/null 2>&1; then
+  ng "89: jq not installed — cannot scan audit source field (#361)"
+else
+  # 89a — the source field is present and resolves `test` under the harness
+  # marker (exported globally at smoke start). RED pre-#361 (no field → ABSENT).
+  s93a=$(s93_last_source)
+  [ "$s93a" = "test" ] \
+    && ok "93a: audit record carries source=test under harness marker (#361)" \
+    || ng "93a: audit source not 'test' under harness marker (got '$s93a') (#361)"
+
+  # 89b (AC#2 default-live) — marker UNSET → source=live. A real session has no
+  # marker, so its records must be live. RED pre-#361.
+  s93b=$( unset CLAUDE_ENG_AUDIT_SOURCE; s93_last_source )
+  [ "$s93b" = "live" ] \
+    && ok "93b: marker unset → source=live (real-session default) (#361)" \
+    || ng "93b: marker unset did not resolve source=live (got '$s93b') (#361)"
+
+  # 89c (AC#2 anti-reclassification) — a FORGED non-`test` value (smoke) must
+  # still resolve `live`: only the exact token `test` flips the field, so a real
+  # action cannot reclassify itself to dodge a friction signal. RED pre-#361.
+  s93c=$( export CLAUDE_ENG_AUDIT_SOURCE=smoke; s93_last_source )
+  [ "$s93c" = "live" ] \
+    && ok "93c: forged CLAUDE_ENG_AUDIT_SOURCE=smoke still resolves source=live (#361)" \
+    || ng "93c: forged non-test marker leaked into source (got '$s93c') (#361)"
+
+  # 89d — jq still parses every line after the new field lands (shape integrity).
+  if jq -c '.' "$SMOKE_AUDIT" >/dev/null 2>&1; then
+    ok "93d: audit.jsonl still one-JSON-object-per-line with the source field (#361)"
+  else
+    ng "93d: audit.jsonl no longer fully jq-parseable after source field (#361)"
+  fi
+
+  # 89e — reviewer_reject_audit helper emits a categorized reject record. RED
+  # pre-#361 (helper absent → source fails → nothing emitted).
+  s93e_before=$(wc -l < "$SMOKE_AUDIT" 2>/dev/null | tr -d ' '); [ -z "$s93e_before" ] && s93e_before=0
+  (
+    # shellcheck disable=SC1091
+    . "$SHELL_ROOT/.claude/hooks/hookrt.sh" 2>/dev/null
+    . "$SHELL_ROOT/.claude/hooks/helpers/reviewer_audit.sh" 2>/dev/null
+    reviewer_reject_audit issue-review scope-bleed 999 2>/dev/null
+  )
+  s93e_after=$(wc -l < "$SMOKE_AUDIT" 2>/dev/null | tr -d ' '); [ -z "$s93e_after" ] && s93e_after=0
+  if [ "$s93e_after" -gt "$s93e_before" ] \
+     && tail -n "$((s93e_after - s93e_before))" "$SMOKE_AUDIT" 2>/dev/null \
+        | jq -e 'select(.event=="warn" and .category=="issue-review" and .decision=="reject" and (.reason | test("class=scope-bleed issue=#999")))' >/dev/null 2>&1; then
+    ok "93e: reviewer_reject_audit emits warn/issue-review/reject with class+issue (#361)"
+  else
+    ng "93e: reviewer_reject_audit did not emit the expected reject record (#361)"
+  fi
+
+  # 89f — structural: each of the 4 reviewer-invoking skills references the
+  # reject-audit emission (reviewer_reject_audit or the reason-class token).
+  s93f_fail=
+  for f in file-issue work-on activate complete-directive; do
+    grep -q 'reviewer_reject_audit\|reason-class\|reason_class' "$SHELL_ROOT/.claude/commands/$f.md" 2>/dev/null \
+      || s93f_fail="$s93f_fail $f"
+  done
+  [ -z "$s93f_fail" ] \
+    && ok "93f: all 4 reviewer-invoking skills wire the reject-audit emission (#361)" \
+    || ng "93f: skills missing reject-audit wiring:$s93f_fail (#361)"
 fi
 
 # ---------- §357 AC1: live shared sinks untouched by the run ----------
