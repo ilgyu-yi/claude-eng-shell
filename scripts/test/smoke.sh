@@ -116,13 +116,21 @@ inject_into "$TMP/fake" >/dev/null 2>&1 && ok "inject_into ok" || ng "inject_int
 grep -q "$TMP/fake" "$TMP/fake/.claude/eng-state/registry.txt" 2>/dev/null && ok "registry entry added (per-project, #316)" || ng "registry not updated"
 grep -q "^.claude/settings.local.json" "$TMP/fake/.git/info/exclude" 2>/dev/null && ok ".git/info/exclude updated" || ng "exclude not updated"
 
-# #316: inject now records the entry in the TARGET's per-project registry. The
+# #316/#357: inject records the entry in the TARGET's per-project registry. The
 # hook-integration tests (§7+) and hook_run drive the hook with CLAUDE_PROJECT_DIR
-# unset — so audit lands at the legacy REAL_AUDIT path AND in_scope resolves via
-# the legacy shared-registry fallback. Mirror the target into the shared registry
-# so those matcher tests reach the matchers (the per-project path is covered by §84).
-# Use the CANONICAL path (inject_into canonicalizes via `cd && pwd -P`; the hook's
-# in_scope compares against pwd -P), else macOS /var vs /private/var never matches.
+# unset, so audit and in_scope resolve through eng_state_dir() — which this harness
+# pins to an isolated $SMOKE_STATE for the WHOLE run (ENG_STATE_DIR_OVERRIDE,
+# exported near the top, #357). That keeps every fixture hook fire off the shell's
+# LIVE shared sinks ($SHELL_ROOT/.claude/audit/audit.jsonl + .../state/registry.txt),
+# restoring the MISSION "shared code, per-project state" isolation invariant for the
+# test path. So we mirror the target into $SMOKE_REG (the override's registry), NOT
+# the live shared registry, so those matcher tests still reach the matchers (the
+# per-project path is covered by §84). Use the CANONICAL path (inject_into
+# canonicalizes via `cd && pwd -P`; the hook's in_scope compares against pwd -P),
+# else macOS /var vs /private/var never matches. The resolver-contract tests
+# (§83/§84) and §20 locally `unset ENG_STATE_DIR_OVERRIDE` to exercise the other
+# branches; the Class B guard tests (§41/§50) register on the target's own
+# eng-state path so the live shared registry is never written at all.
 FAKE_CANON=$(cd "$TMP/fake" && pwd -P)
 mkdir -p "$SHELL_ROOT/.claude/state"
 grep -qxF "$FAKE_CANON" "$SHELL_ROOT/.claude/state/registry.txt" 2>/dev/null \
