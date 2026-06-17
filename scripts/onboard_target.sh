@@ -111,6 +111,8 @@ if [ -n "$DRY_RUN" ]; then
   ensure_label "P1"              "D93F0B" "Priority 1 — next"
   ensure_label "P2"              "FBCA04" "Priority 2 — soon"
   ensure_label "P3"              "0E8A16" "Priority 3 — eventually"
+  ensure_label "initiative:challenged"          "0052CC" "Execution challenged the parent Initiative; orchestrator re-evaluation requested (projected from /initiative-feedback by CI, #359)"
+  ensure_label "initiative:completion-requested" "0052CC" "Execution signals the parent Initiative's termination may be met; orchestrator assessment requested (projected from /initiative-feedback by CI, #359)"
 else
   bash "$CLAUDE_ENG_SHELL_ROOT/scripts/ensure_v3_labels.sh" 2>&1 | sed 's/^/  /'
 fi
@@ -121,10 +123,10 @@ fi
 ensure_label "directive" "0E8A16" "Directive Issue (dir-mode, SPEC §1.7)"
 ensure_label "initiative" "0052CC" "Initiative: planning-tier strategic commitment consumed from upstream (dir-mode, SPEC §1.7)"
 
-echo "onboard_target: tier 2 labels done (13 total: 11 from ensure_v3_labels.sh + 2 inline: directive, initiative)."
+echo "onboard_target: tier 2 labels done (15 total: 13 from ensure_v3_labels.sh + 2 inline: directive, initiative)."
 
 if [ "$TIER" = 2 ]; then
-  audit_log info onboard-dir-mode created "target=$TARGET_OWNER_REPO tier=2 labels=13"
+  audit_log info onboard-dir-mode created "target=$TARGET_OWNER_REPO tier=2 labels=15"
   exit 0
 fi
 
