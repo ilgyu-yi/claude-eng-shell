@@ -29,6 +29,17 @@ set -uo pipefail
 SHELL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 export CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT"
 
+# §357 AC1 backstop (capture half) — snapshot the LIVE shared sinks' size BEFORE
+# any fixture fires. Reads the literal $SHELL_ROOT paths (NOT $SMOKE_*): a smoke
+# run must add ZERO lines to the shell's live audit log + scope registry (state
+# isolation, #357). The matching assertion sits just before the results block;
+# it fails LOUD if a future change reintroduces a live-sink write. Captured here,
+# before the §4 registry backup, so it reflects the truly untouched live state.
+S357_LIVE_AUDIT="$SHELL_ROOT/.claude/audit/audit.jsonl"
+S357_LIVE_REG="$SHELL_ROOT/.claude/state/registry.txt"
+s357_audit_before=$(wc -l < "$S357_LIVE_AUDIT" 2>/dev/null | tr -d ' '); [ -z "$s357_audit_before" ] && s357_audit_before=0
+s357_reg_before=$(wc -l < "$S357_LIVE_REG" 2>/dev/null | tr -d ' '); [ -z "$s357_reg_before" ] && s357_reg_before=0
+
 PASS=0
 FAIL=0
 ok() { printf '✓ %s\n' "$1"; PASS=$((PASS+1)); }
@@ -8586,6 +8597,21 @@ if [ -z "$S92_FAIL" ]; then
   ok "92: issue/plan/code-reviewer prompts reference SPEC §6.0 (enforcement-style lens) (#354)"
 else
   ng "92: reviewer prompts missing SPEC §6.0 reference:$S92_FAIL (#354)"
+fi
+
+# ---------- §357 AC1: live shared sinks untouched by the run ----------
+# A smoke run must add ZERO lines to the live audit log and ZERO entries to the
+# live scope registry (MISSION "shared code, per-project state" isolation, #357).
+# Reads the same LIVE $SHELL_ROOT paths snapshotted at startup — NOT $SMOKE_*,
+# else the assertion would be vacuous (it would compare the isolated dir to
+# itself). On pre-#357 code this FAILS (fixture fires append to the live audit);
+# after the whole-run override it passes (every fire resolves to $SMOKE_STATE).
+s357_audit_after=$(wc -l < "$S357_LIVE_AUDIT" 2>/dev/null | tr -d ' '); [ -z "$s357_audit_after" ] && s357_audit_after=0
+s357_reg_after=$(wc -l < "$S357_LIVE_REG" 2>/dev/null | tr -d ' '); [ -z "$s357_reg_after" ] && s357_reg_after=0
+if [ "$s357_audit_after" = "$s357_audit_before" ] && [ "$s357_reg_after" = "$s357_reg_before" ]; then
+  ok "357: smoke run left the live audit log + scope registry untouched (#357)"
+else
+  ng "357: smoke polluted live sinks — audit Δ=$((s357_audit_after - s357_audit_before)) registry Δ=$((s357_reg_after - s357_reg_before)) (#357)"
 fi
 
 # ---------- results ----------
