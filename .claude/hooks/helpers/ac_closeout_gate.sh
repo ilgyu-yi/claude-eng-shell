@@ -134,8 +134,10 @@ except ValueError:
 # merge gates (ac-closeout / merge-strategy) must NOT engage.
 #   FAIL-CLOSED: python3 absent, a strip/parse error, or an unclosed quote →
 #   return 0 (treat as a merge), so a real merge is never let through by a
-#   stripping failure. Deliberate residual: a merge wrapped in an executed
-#   quoted string (`bash -c "gh pr merge …"`) is stripped and thus not detected.
+#   stripping failure. Deliberate residuals (contrived, and the gate is escapable
+#   anyway): a merge wrapped in an executed quoted string (`bash -c "gh pr merge
+#   …"`) and a quote-concatenated form (`gh' 'pr' 'merge`) are both stripped and
+#   thus not detected — neither was caught by the pre-#340 coarse grep either.
 #   `<<<` here-strings are treated as data (a same-line operand), not heredocs.
 # Pass the RAW (pre-normalization) command so heredoc newlines are intact —
 # pre_tool_use.sh flattens `\n`→space before the matchers run.
@@ -169,6 +171,11 @@ while i < n:
     out.append(line)
     if delim is not None:
         i += 1
+        # `.strip()` is more lenient than bash (bash wants an exact match for
+        # `<<`, tabs-only stripping for `<<-`). The divergence is deliberately on
+        # the SAFE side: a lenient terminator closes the heredoc earlier-or-equal
+        # to bash, so a line bash would execute is never dropped → no MERGE→DATA
+        # leak via heredocs.
         while i < n and lines[i].strip() != delim:
             i += 1                         # drop body line (data, not command)
         # keep the terminator line if present — it carries no command words
@@ -209,12 +216,19 @@ if residue is None:
     sys.exit(2)                            # ambiguous → caller fail-closes to merge
 
 # 3. The command words must survive stripping. Mirror the coarse grep shape
-#    (\bgh\s+pr\s+merge followed by whitespace or end).
-sys.exit(0 if re.search(r"\bgh\s+pr\s+merge(\s|$)", residue, re.M) else 1)
+#    (\bgh\s+pr\s+merge followed by whitespace or end). Exit 7 (a reserved,
+#    distinguished value) is the ONLY signal for "pure data — not a merge"; the
+#    word-match case exits 0. This keeps the caller fail-closed: an unhandled
+#    exception / syntax error exits 1 (NOT 7), and ambiguity exits 2 — both fall
+#    through to "treat as merge" rather than being misread as data.
+sys.exit(0 if re.search(r"\bgh\s+pr\s+merge(\s|$)", residue, re.M) else 7)
 ' >/dev/null 2>&1
   rc=$?
-  [ "$rc" = 1 ] && return 1                # python3 exit 1 = pure data → not a merge
-  return 0                                 # 0 = merge; 2 / crash = fail-closed → merge
+  # Exit 7 is the sole "pure data" signal. Everything else — 0 (words survived),
+  # 2 (ambiguous), 1 (python crash / syntax error), or any other code — maps to
+  # "is a merge" so a stripping failure can never let a real merge through.
+  [ "$rc" = 7 ] && return 1                # python3 exit 7 = pure data → not a merge
+  return 0                                 # fail-closed: merge on 0 / 2 / crash / other
 }
 
 pr_needs_closeout() {
