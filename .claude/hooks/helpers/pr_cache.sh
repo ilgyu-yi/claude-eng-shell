@@ -81,6 +81,27 @@ pr_cache_read() {
   printf '%s' "$sha"
 }
 
+pr_cache_head() {
+  # Print the cached `last_synced_head` (the HEAD SHA at the last /sync-pr) for
+  # PR <n>, or empty if no cache exists. Mirrors pr_cache_read's jq-primary +
+  # grep-fallback shape and the `cache_path` naming hazard note (#82). The Stop
+  # hook compares this to `git rev-parse HEAD` to decide the /sync-pr nudge
+  # (SPEC §6.3); a differing/empty result is treated as "not in sync" by the
+  # caller, so a corrupt/absent cache fails soft to no-nudge rather than erroring.
+  local cache_path
+  cache_path=$(_pr_cache_path "$1")
+  [ -f "$cache_path" ] || return 0
+
+  local head=""
+  if command -v jq >/dev/null 2>&1; then
+    head=$(jq -er '.last_synced_head // ""' "$cache_path" 2>/dev/null) || head=""
+  else
+    head=$(grep -oE '"last_synced_head"[[:space:]]*:[[:space:]]*"[^"]*"' "$cache_path" 2>/dev/null \
+      | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
+  fi
+  printf '%s' "$head"
+}
+
 pr_cache_write() {
   local n="$1" body_sha="$2" head="${3:-}"
   # See pr_cache_read for why `path` is renamed to `cache_path` (#82).

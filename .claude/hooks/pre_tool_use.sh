@@ -138,9 +138,17 @@ case "$tool" in
     # `eval "git push --force"` still gets blocked by the force-push
     # matcher on the literal substring, while plain `eval "ls"` warns
     # and proceeds.
-    # Heredoc pattern excludes `<<<` here-strings (preceding-char check).
+    # Heredoc branch is scoped to *shell-spawning* heredocs per SPEC §6.1
+    # ("heredoc-spawned shells (bash <<EOF)") — a shell verb (bash/sh/zsh,
+    # optionally /path/-prefixed or env-wrapped, with short flags) in command
+    # position governing `<<`. So `bash <<EOF`, `env bash <<EOF`, `/bin/bash
+    # <<EOF` warn, while benign data heredocs do NOT — incl. a `.sh`/`.zsh`
+    # *operand* (`cat foo.sh <<EOF`), since only the verb + short flags may sit
+    # between it and `<<`. Excludes `<<<` here-strings (delimiter check). Residual
+    # under-warn: a shell reached via a *non-space* adjacency (backtick, `>`, tab)
+    # — warn-only matcher, so an under-warn costs an audit line, not a gate (§6.0).
     if printf '%s' "$cmd" | grep -qE '(^|[^[:alnum:]_])(eval|bash[[:space:]]+-c|sh[[:space:]]+-c|python[[:space:]]*[0-9.]*[[:space:]]+-c)([^[:alnum:]_]|$)' \
-       || printf '%s' "$cmd" | grep -qE '(^|[^<])<<-?[[:space:]]*[A-Za-z_]'; then
+       || printf '%s' "$cmd" | grep -qE '(^| |;|\||&|\(|\{)(env )?(/[^ ]*/)?(bash|sh|zsh)( -[A-Za-z]+)* *['\''"]*<<-?[[:space:]]*['\''"]*[A-Za-z_]'; then
       decided=
       audit_log warn bypass-suspect notice "$cmd"
       decided=1
