@@ -78,6 +78,7 @@ for f in \
   .claude/commands/onboard.md \
   .claude/commands/work-on.md \
   .claude/commands/ship.md \
+  .claude/commands/flush.md \
   .claude/hooks/pre_tool_use.sh \
   .claude/hooks/post_tool_use.sh \
   .claude/hooks/stop.sh \
@@ -9338,6 +9339,45 @@ if printf 'Next: /activate-directive <N> when ready' \
   ok "100e: deprecated-alias forward-guidance guard is falsifiable (#377)"
 else
   ng "100e: forward-guidance guard fails to flag a synthetic Next:/activate-directive (#377)"
+fi
+
+# ---------- 101. /flush affordance + flush → clear → reconstruct lifecycle (#387, Directive #385) ----------
+# Doc→Test→Code: this section is authored in the Test phase and FAILS until the
+# Code phase adds .claude/commands/flush.md. Anti-vacuity (smoke.sh header): the
+# skill-content greps anchor on the CONTRACT phrases the prose must carry
+# (active→archived, the .claude/state/ durable target, the native-/clear
+# non-invocation), not bare tokens; a missing flush.md fails LOUD via ng.
+
+# §101a: /flush skill exists and declares the pre-clear archive contract.
+S101_FLUSH="$SHELL_ROOT/.claude/commands/flush.md"
+if [ -f "$S101_FLUSH" ] \
+   && grep -q 'active → archived' "$S101_FLUSH" \
+   && grep -q '\.claude/state/' "$S101_FLUSH" \
+   && grep -qi 'does not.*invoke\|cannot.*invoke\|never.*invoke' "$S101_FLUSH" \
+   && grep -q '/clear' "$S101_FLUSH"; then
+  ok "101a: /flush skill declares active→archived flush into a durable artifact, no native /clear invocation (#387)"
+else
+  ng "101a: /flush skill missing or lacks the pre-clear archive contract (active→archived + .claude/state/ + no-native-/clear) (#387)"
+fi
+
+# §101b: SPEC §3.7 lifecycle section + §5.24 /flush roster entry present, and the
+# TOC carries both rows (heading forms are caret-anchored so a prose mention of
+# "3.7" cannot satisfy them).
+if grep -qE '^### 3\.7 Context lifecycle: flush → clear → reconstruct' "$SHELL_ROOT/SPEC.md" \
+   && grep -qE '^### 5\.24 ' "$SHELL_ROOT/SPEC.md" \
+   && grep -qF '§3.7 | Context lifecycle: flush → clear → reconstruct' "$SHELL_ROOT/SPEC.md" \
+   && grep -qF '§5.24 |' "$SHELL_ROOT/SPEC.md"; then
+  ok "101b: SPEC §3.7 lifecycle + §5.24 /flush sections present in body and TOC (#387)"
+else
+  ng "101b: SPEC §3.7 / §5.24 heading or TOC row missing (#387)"
+fi
+
+# §101c: SPEC TOC is in sync (build_toc.sh --check passes) — adding the headings
+# without regenerating the TOC must redden, same guarantee as §28.
+if bash "$SHELL_ROOT/scripts/build_toc.sh" --check >/dev/null 2>&1; then
+  ok "101c: SPEC TOC in sync after §3.7/§5.24 additions (#387)"
+else
+  ng "101c: SPEC TOC out of sync — rerun scripts/build_toc.sh (#387)"
 fi
 
 # ---------- §357 AC1: live shared sinks untouched by the run ----------
