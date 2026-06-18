@@ -9427,6 +9427,78 @@ else
   ng "102c: targeted Read still nudged (or non-zero rc=$c_rc) — guard not offset-aware (#389)"
 fi
 
+# ---------- §103 (#392): SPEC §8 directory tree drift-guard (flat-dir leaf counts) ----------
+# SPEC §8's "Directory structure" block is authoritative. The four flat leaf-list
+# directories (agents/, commands/, helpers/, docs/) are count-checked against disk,
+# so a PR that adds/removes an agent/command/helper/doc without updating §8 is caught.
+# templates/ and scripts/ carry summarized subtree nodes (leaves churn independently)
+# — those are asserted present as text (node-presence), not leaf-counted.
+#
+# Parsing: slice the §8 fenced block (between the first ``` after the "## 8." heading
+# and the next ```), then for each dir count the leaf lines between its node header
+# and the next sibling node. awk reads files directly and uses range patterns with
+# `exit` — no `... | head` pipe (which SIGPIPEs the upstream under pipefail and fails
+# nondeterministically by size, GNU vs BSD). The dir-header line is excluded from its
+# own range (consumed by `next`), so an annotation like "← 9 subagents" on the header
+# can't be miscounted as a leaf.
+S103_SPEC="$SHELL_ROOT/SPEC.md"
+S103_BLOCK=$(awk '
+  /^## 8\. Directory structure/ {ins=1}
+  ins && /^## 9\./ {exit}
+  ins
+' "$S103_SPEC" | awk '
+  /^```/ {fence++; next}
+  fence==1 {print}
+')
+
+# s103_count <start_re> <end_re> <leaf_re>: count leaf lines strictly between the
+# start-marker line (exclusive) and the first end-marker line (exclusive). An end_re
+# that never matches counts through end-of-block (used for the last node, docs/).
+s103_count() {
+  printf '%s\n' "$S103_BLOCK" | awk -v sre="$1" -v ere="$2" -v lre="$3" '
+    $0 ~ sre {inrange=1; next}
+    inrange && $0 ~ ere {exit}
+    inrange && $0 ~ lre {n++}
+    END {print n+0}
+  '
+}
+
+# Listed counts from the §8 block. Ranges delimited by the next sibling node:
+#   agents/ → commands/ ; commands/ → hooks/ ; helpers/ → templates/ ; docs/ → EOF.
+S103_A_SPEC=$(s103_count '├── agents/'   '├── commands/'  '\.md')
+S103_C_SPEC=$(s103_count '├── commands/' '├── hooks/'     '\.md')
+S103_H_SPEC=$(s103_count '└── helpers/'  '├── templates/' '\.sh')
+S103_D_SPEC=$(s103_count '└── docs/'     '^```NEVER```'   '\.md')
+
+# Actual disk counts. ls into wc — globs that match nothing degrade to 0.
+s103_disk() { ls "$@" 2>/dev/null | wc -l | tr -d ' '; }
+S103_A_DISK=$(s103_disk "$SHELL_ROOT"/.claude/agents/*.md)
+S103_C_DISK=$(s103_disk "$SHELL_ROOT"/.claude/commands/*.md)
+S103_H_DISK=$(s103_disk "$SHELL_ROOT"/.claude/hooks/helpers/*.sh)
+S103_D_DISK=$(s103_disk "$SHELL_ROOT"/docs/*.md)
+
+S103_DRIFT=""
+[ "$S103_A_SPEC" = "$S103_A_DISK" ] || S103_DRIFT="$S103_DRIFT agents(§8=$S103_A_SPEC,disk=$S103_A_DISK)"
+[ "$S103_C_SPEC" = "$S103_C_DISK" ] || S103_DRIFT="$S103_DRIFT commands(§8=$S103_C_SPEC,disk=$S103_C_DISK)"
+[ "$S103_H_SPEC" = "$S103_H_DISK" ] || S103_DRIFT="$S103_DRIFT helpers(§8=$S103_H_SPEC,disk=$S103_H_DISK)"
+[ "$S103_D_SPEC" = "$S103_D_DISK" ] || S103_DRIFT="$S103_DRIFT docs(§8=$S103_D_SPEC,disk=$S103_D_DISK)"
+
+if [ -z "$S103_DRIFT" ]; then
+  ok "103a: SPEC §8 flat-dir leaf counts match disk (agents/commands/helpers/docs) (#392)"
+else
+  ng "103a: SPEC §8 directory tree drifted from disk —$S103_DRIFT (#392)"
+fi
+
+# §103b: node-presence for the summarized subtrees (cheap, robust — text not counts).
+# templates/ summarizes target-substrate/; scripts/ summarizes lib/ + test/.
+if printf '%s\n' "$S103_BLOCK" | grep -qF 'target-substrate/' \
+   && printf '%s\n' "$S103_BLOCK" | grep -qF 'lib/' \
+   && printf '%s\n' "$S103_BLOCK" | grep -qF 'test/'; then
+  ok "103b: SPEC §8 summarized subtree nodes present (target-substrate/, lib/, test/) (#392)"
+else
+  ng "103b: SPEC §8 missing a summarized subtree node (target-substrate/ / lib/ / test/) (#392)"
+fi
+
 # ---------- §357 AC1: live shared sinks untouched by the run ----------
 # A smoke run must add ZERO lines to the live audit log and ZERO entries to the
 # live scope registry (MISSION "shared code, per-project state" isolation, #357).
