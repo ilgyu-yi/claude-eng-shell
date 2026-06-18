@@ -1359,6 +1359,53 @@ else
   ng "16j: -F-only commit wrongly blocked, exit=$exit_code (#367)"
 fi
 
+# 16k (#383): single -m, valid line-1 subject, body merely MENTIONS a `<<EOF`
+# token as prose → must ALLOW (line-1 precedence). RED pre-fix: the heredoc
+# detector fires on the body `<<EOF` and returns a prose body line as the
+# "subject", which fails the CC regex and wrongly blocks.
+fb_prose=$(printf '%s\n' \
+  'git commit -m "fix(#1): scope bypass-suspect to shell-spawning heredocs' \
+  '' \
+  'the matcher now requires bash <<EOF style openers; cat foo.sh <<EOF stays benign"')
+exit_code=$(hook_run "$fb_prose")
+if [ "$exit_code" = "0" ]; then
+  ok "16k: valid line-1 + body <<EOF prose not mistaken for a heredoc message (#383)"
+else
+  ng "16k: body <<EOF prose wrongly triggers heredoc extraction → blocked, exit=$exit_code (#383)"
+fi
+
+# 16l (#383): the GENUINE `-m "$(cat <<'EOF' ... EOF)"` substitution form with a
+# valid subject must STILL extract the heredoc-body subject and ALLOW — line-1
+# precedence must not short-circuit it (line-1 there is the `$(cat <<'EOF'`
+# opener, which is not a valid CC subject, so it correctly falls through).
+gen_heredoc=$(printf '%s\n' \
+  "git commit -m \"\$(cat <<'EOF'" \
+  "fix(#1): genuine heredoc subject" \
+  "" \
+  "body line" \
+  "EOF" \
+  ")\"")
+exit_code=$(hook_run "$gen_heredoc")
+if [ "$exit_code" = "0" ]; then
+  ok "16l: genuine heredoc substitution form still extracts subject (no regression) (#383)"
+else
+  ng "16l: genuine heredoc form wrongly blocked by line-1 precedence, exit=$exit_code (#383)"
+fi
+
+# 16m (#383): MALFORMED line-1 + body `<<EOF` prose → must STILL BLOCK (fail-safe).
+# line-1 is not a valid CC subject, so line-1 precedence does NOT short-circuit;
+# the extractor falls through and the gate still blocks the malformed subject.
+fb_bad=$(printf '%s\n' \
+  'git commit -m "broken subject not conventional' \
+  '' \
+  'body with a bash <<EOF prose token"')
+exit_code=$(hook_run "$fb_bad")
+if [ "$exit_code" = "2" ]; then
+  ok "16m: malformed line-1 with <<EOF prose still blocks (fail-safe) (#383)"
+else
+  ng "16m: malformed line-1 with <<EOF prose should still block, exit=$exit_code (#383)"
+fi
+
 # ---------- 22. git option-prefix matcher tolerance (#37) ----------
 # Every `git <subcommand>` matcher must accept the `git -c <opt>=<val>`,
 # `git -C <path>`, and `git --no-pager` prefixes between `git` and the
