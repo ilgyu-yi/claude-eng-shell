@@ -9499,6 +9499,48 @@ else
   ng "103b: SPEC §8 missing a summarized subtree node (target-substrate/ / lib/ / test/) (#392)"
 fi
 
+# ---------- §104 (#396): always-on injection budget — CLAUDE.md pointer-index discipline ----------
+# CLAUDE.md is injected into every session, so it is pure always-on cost. The
+# rewrite (#396) turned it into a thin pointer index whose contracts live in full
+# in SPEC; two guards keep it from re-bloating back into a second copy.
+S104_CLAUDE="$SHELL_ROOT/.claude/CLAUDE.md"
+
+# §104a (PRIMARY, mirror §91): every matcher/mechanism entry in the
+# "## What hooks enforce" section must carry a `SPEC §` reference — so each pointer
+# names its canonical home and cannot quietly grow into standalone contract prose.
+# Scope to the section via heading anchors ("## What hooks enforce" → next "## ").
+# Only `- ` bullet lines inside that range are checked (the intro + Escape paragraphs
+# reference SPEC § too, but bullets are the matcher pointers we pin). awk reads the
+# file directly and collects EVERY offending entry — no `... | head` pipe (which
+# would SIGPIPE the upstream under `set -o pipefail` and fail by size, GNU vs BSD)
+# and no first-failure short-circuit.
+S104A_FAIL=$(awk '
+  /^## What hooks enforce/ {ins=1; next}
+  ins && /^## / {exit}
+  ins && /^- / {
+    if (index($0, "SPEC §") == 0) {
+      # name the offending entry by its leading bold token if present, else the line
+      tok = $0
+      if (match($0, /\*\*[^*]+\*\*/)) tok = substr($0, RSTART+2, RLENGTH-4)
+      print tok
+    }
+  }
+' "$S104_CLAUDE")
+if [ -z "$S104A_FAIL" ]; then
+  ok "104a: every '## What hooks enforce' bullet in CLAUDE.md carries a SPEC § reference (#396)"
+else
+  ng "104a: CLAUDE.md 'What hooks enforce' bullets missing a SPEC § reference: $(printf '%s' "$S104A_FAIL" | tr '\n' ';') (#396)"
+fi
+
+# §104b (SECONDARY, mirror §103 numeric style): always-on byte ceiling. SPEC §9
+# records a ≤12000-byte budget for the injected CLAUDE.md; over → re-bloat regression.
+S104_BYTES=$(wc -c < "$S104_CLAUDE" 2>/dev/null | tr -d ' '); [ -z "$S104_BYTES" ] && S104_BYTES=0
+if [ "$S104_BYTES" -le 12000 ]; then
+  ok "104b: CLAUDE.md within the always-on injection budget — ${S104_BYTES} ≤ 12000 bytes (SPEC §9) (#396)"
+else
+  ng "104b: CLAUDE.md over the always-on injection budget — ${S104_BYTES} > 12000 bytes (SPEC §9 re-bloat) (#396)"
+fi
+
 # ---------- §357 AC1: live shared sinks untouched by the run ----------
 # A smoke run must add ZERO lines to the live audit log and ZERO entries to the
 # live scope registry (MISSION "shared code, per-project state" isolation, #357).
