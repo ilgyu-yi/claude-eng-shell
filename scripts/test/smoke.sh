@@ -1406,6 +1406,30 @@ else
   ng "16m: malformed line-1 with <<EOF prose should still block, exit=$exit_code (#383)"
 fi
 
+# 16n (#383): the legacy awk fallback (python3 absent) honors line-1 precedence
+# too — parity with the python primary. Build a curated PATH carrying the
+# coreutils the fallback needs but WITHOUT python3 (so `command -v python3` is
+# false and _codepoint_len uses `wc -m`), then call extract_commit_subject
+# directly on the body-<<EOF-prose case and assert it returns line-1. An ASCII
+# subject keeps the wc -m length check locale-robust on CI.
+S16N_BIN="$TMP/nopy3-bin"; mkdir -p "$S16N_BIN"
+for t in sed awk grep head tr wc cat; do
+  s16n_src=$(command -v "$t" 2>/dev/null) && ln -sf "$s16n_src" "$S16N_BIN/$t"
+done
+if (
+    . "$SHELL_ROOT/.claude/hooks/helpers/conventional_commit.sh"
+    raw16n=$(printf '%s\n' 'git commit -m "fix(#1): valid line-1 subject' '' 'body mentioning bash <<EOF prose"')
+    norm16n=$(printf '%s' "$raw16n" | tr '\n' ' ')
+    export PATH="$S16N_BIN"
+    command -v python3 >/dev/null 2>&1 && exit 3   # guard: python3 must be absent for this to test the awk path
+    out16n=$(extract_commit_subject "$raw16n" "$norm16n")
+    [ "$out16n" = "fix(#1): valid line-1 subject" ]
+  ); then
+  ok "16n: awk fallback (no python3) honors line-1 precedence — parity (#383)"
+else
+  ng "16n: awk fallback mis-extracts body <<EOF prose without python3 (rc=$?) (#383)"
+fi
+
 # ---------- 22. git option-prefix matcher tolerance (#37) ----------
 # Every `git <subcommand>` matcher must accept the `git -c <opt>=<val>`,
 # `git -C <path>`, and `git --no-pager` prefixes between `git` and the
