@@ -78,6 +78,7 @@ for f in \
   .claude/commands/onboard.md \
   .claude/commands/work-on.md \
   .claude/commands/ship.md \
+  .claude/commands/flush.md \
   .claude/hooks/pre_tool_use.sh \
   .claude/hooks/post_tool_use.sh \
   .claude/hooks/stop.sh \
