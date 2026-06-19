@@ -9586,6 +9586,7 @@ done
 # Carry the candidate readers + their path lib so the advisory can invoke them in-root.
 cp "$SHELL_ROOT/scripts/narrowing_candidates.sh" "$S105_FAKE_ROOT/scripts/" 2>/dev/null
 cp "$SHELL_ROOT/scripts/promotion_candidates.sh" "$S105_FAKE_ROOT/scripts/" 2>/dev/null
+cp "$SHELL_ROOT/scripts/ceremony_candidates.sh" "$S105_FAKE_ROOT/scripts/" 2>/dev/null
 cp "$SHELL_ROOT/scripts/lib/audit_log_path.sh" "$S105_FAKE_ROOT/scripts/lib/" 2>/dev/null
 : > "$S105_FAKE_ROOT/.claude/state/registry.txt"
 (
@@ -9613,6 +9614,9 @@ run_friction_session() {
   (
     export CLAUDE_ENG_SHELL_ROOT="$S105_FAKE_ROOT"
     export PATH="$S105_GIT_SHIM:$PATH"
+    # Point the ceremony reader (#401) at the fixture repo (only an empty init commit,
+    # no ceremony groups) so it stays silent and does not scan the real repo's history.
+    export CLAUDE_PROJECT_DIR="$S105_FAKE_ROOT"
     export ENG_STATE_DIR_OVERRIDE="$1"
     export SESSION_START_FRICTION_TTL="${2:-21600}"
     # keep the self-sync stamp fresh so only the friction path varies
@@ -9752,6 +9756,97 @@ if grep -qE '^### 9\.6 `directive\.md`'          "$SHELL_ROOT/SPEC.md" \
   ok "106: SPEC §9.6/§9.7/§9.8 specs present for directive/spec/readme_for_target templates, TOC in sync (#393)"
 else
   ng "106: SPEC §9 spec missing for a referenced template (directive/spec/readme_for_target) or TOC out of sync (#393)"
+fi
+
+# ---------- §107 (#401): ceremony mis-sizing audit consumer (measure-first) ----------
+# scripts/ceremony_candidates.sh is a §6.5(d) friction reader that, unlike the two
+# audit-log siblings, mines COMMIT HISTORY (the ceremony signal is not in audit.jsonl).
+# It groups commits by #<issue> and surfaces both directions: under-ceremony (a feat
+# group >1 file with no test/docs phase commit) and over-ceremony (a >=3-commit phase
+# arc over a single file). 107a is Doc-phase (green now); 107b-f are RED until Code.
+
+# 107a (Doc; green now — Phase A landed): SPEC §6.5(d) + §6.0 P3 name the reader, the
+# scripts tree lists it, and CONFIG catalogs its env knobs.
+if grep -q 'ceremony_candidates.sh' "$SHELL_ROOT/SPEC.md" \
+   && grep -q 'Ceremony-mismatch line' "$SHELL_ROOT/SPEC.md" \
+   && grep -q 'CEREMONY_LOOKBACK' "$SHELL_ROOT/docs/CONFIG.md" \
+   && grep -q 'CEREMONY_MIN_COUNT' "$SHELL_ROOT/docs/CONFIG.md"; then
+  ok "107a: SPEC §6.5(d)/§6.0 P3 name ceremony_candidates.sh + CONFIG catalogs its knobs (#401)"
+else
+  ng "107a: SPEC/CONFIG do not fully document the ceremony reader (#401)"
+fi
+
+S107_SCRIPT="$SHELL_ROOT/scripts/ceremony_candidates.sh"
+if [ ! -f "$S107_SCRIPT" ]; then
+  ng "107b: scripts/ceremony_candidates.sh missing — Code not yet landed (#401)"
+  ng "107c: over-ceremony detection — script missing (#401)"
+  ng "107d: well-sized omitted + clean sentinel + exit 0 — script missing (#401)"
+  ng "107e: non-repo/absent dir graceful exit 0 — script missing (#401)"
+  ng "107f: session_start.sh wires the reader into the §6.5(d) advisory — Code not landed (#401)"
+else
+  # Synthetic git fixture: three #<issue> groups exercising both flags + the well-sized
+  # negative. Offline, local git only (mirror §105's init style).
+  S107_DIR=$(mktemp -d)
+  S107_REPO="$S107_DIR/repo"
+  mkdir -p "$S107_REPO"
+  (
+    cd "$S107_REPO" || exit 1
+    git init -q
+    gc() { git -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q "$@"; }
+    # #901 under-ceremony: a feat over 2 files, no test/docs phase commit.
+    printf 'a\n' > a.sh; printf 'b\n' > b.sh; git add a.sh b.sh; gc -m 'feat(#901): two-file feature, no phasing'
+    # #902 over-ceremony: a docs+test+code arc, all over ONE file.
+    printf '1\n' > tiny.sh; git add tiny.sh; gc -m 'docs(#902): tiny doc'
+    printf '2\n' >> tiny.sh; git add tiny.sh; gc -m 'test(#902): tiny test'
+    printf '3\n' >> tiny.sh; git add tiny.sh; gc -m 'feat(#902): tiny code'
+    # #903 well-sized: a feat WITH test+docs phase commits over multiple files → omitted.
+    printf 'f1\n' > f1.sh; printf 'f2\n' > f2.sh; git add f1.sh f2.sh; gc -m 'feat(#903): multi-file feature'
+    printf 't\n' > t1.sh; git add t1.sh; gc -m 'test(#903): tests'
+    printf 'd\n' > d1.md; git add d1.md; gc -m 'docs(#903): docs'
+  )
+  s107_out=$(bash "$S107_SCRIPT" "$S107_REPO" 2>/dev/null); s107_rc=$?
+
+  # 107b: under-ceremony group #901 surfaced.
+  if [ "$s107_rc" = 0 ] && printf '%s\n' "$s107_out" | grep -q '901' \
+     && printf '%s\n' "$s107_out" | grep -qi 'under'; then
+    ok "107b: surfaces the under-ceremony #901 cluster (feat, >1 file, no phase commit) (#401)"
+  else
+    ng "107b: did not surface the under-ceremony #901 cluster (rc=$s107_rc) (#401)"
+  fi
+  # 107c: over-ceremony group #902 surfaced.
+  if printf '%s\n' "$s107_out" | grep -q '902' && printf '%s\n' "$s107_out" | grep -qi 'over'; then
+    ok "107c: surfaces the over-ceremony #902 cluster (phase arc over a single file) (#401)"
+  else
+    ng "107c: did not surface the over-ceremony #902 cluster (#401)"
+  fi
+  # 107d: well-sized #903 omitted; clean repo → sentinel; exit 0; output is the indented
+  # cluster shape the §6.5(d) grep keys on.
+  s107_clean=$(mktemp -d)
+  ( cd "$s107_clean" && git init -q && git -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit --allow-empty -q -m 'chore: init' )
+  s107_clean_out=$(bash "$S107_SCRIPT" "$s107_clean" 2>/dev/null); s107_clean_rc=$?
+  if ! printf '%s\n' "$s107_out" | grep -q '903' \
+     && printf '%s\n' "$s107_out" | grep -qE '^[[:space:]]+.+\|.+=' \
+     && [ "$s107_clean_rc" = 0 ] \
+     && printf '%s\n' "$s107_clean_out" | grep -qi 'none'; then
+    ok "107d: omits the well-sized #903 group, emits the grep-shaped cluster + clean sentinel, exit 0 (#401)"
+  else
+    ng "107d: well-sized group leaked, wrong output shape, or no clean sentinel (clean_rc=$s107_clean_rc) (#401)"
+  fi
+  # 107e: a non-repo dir and an absent dir both degrade to silence, exit 0 (fail-open).
+  bash "$S107_SCRIPT" "$S107_DIR" >/dev/null 2>&1; s107_e1=$?     # exists, not a git repo
+  bash "$S107_SCRIPT" "$S107_DIR/nope" >/dev/null 2>&1; s107_e2=$? # absent
+  if [ "$s107_e1" = 0 ] && [ "$s107_e2" = 0 ]; then
+    ok "107e: degrades to exit 0 on a non-repo dir and an absent dir (fail-open) (#401)"
+  else
+    ng "107e: crashed on non-repo/absent dir (non-repo=$s107_e1 absent=$s107_e2) (#401)"
+  fi
+  # 107f: the §6.5(d) advisory invokes the reader (Code wires it into session_start.sh).
+  if grep -q 'ceremony_candidates.sh' "$SHELL_ROOT/.claude/hooks/session_start.sh"; then
+    ok "107f: session_start.sh wires ceremony_candidates.sh into the friction advisory (#401)"
+  else
+    ng "107f: session_start.sh does not invoke ceremony_candidates.sh — advisory not wired (#401)"
+  fi
+  rm -rf "$S107_DIR" "$s107_clean"
 fi
 
 # ---------- §357 AC1: live shared sinks untouched by the run ----------
