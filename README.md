@@ -41,6 +41,20 @@ Register an external repo instead of cloning into `workspace/`:
 ./scripts/register.sh ~/code/<repo>     # or: claude-eng ~/code/<repo> — an unregistered path prompts to register
 ```
 
+## Adopting it on your repo
+
+Before the loop above runs cleanly on a real project, four things are worth knowing.
+
+**Prerequisites.** Beyond the `bootstrap.sh` deps (`git` / `gh` / `jq`, `python3` recommended), the GitHub flow needs `gh auth login` with a token that can open PRs and manage issues. Adopting **dir-mode** additionally needs the `project` token scope (the dir-mode GitHub Project is created by `setup_project.sh`) and permission to push workflows (issue/Project mirroring installs `.github/workflows/`). `/onboard` reports what's missing — fix auth before filing the first issue.
+
+**Footprint — what lands in your repo, and what's tracked.** Injection (`clone-into.sh` / `register.sh`) creates **symlinks** under the target's `.claude/`: `eng-shell-root` (→ the canonical shell), `settings.local.json` (→ the shell's injected hooks), and one per `agents/` + `commands/*.md` asset — plus a per-project registry/state dir under `eng-state/`. The shell adds `eng-shell-root`, `settings.local.json`, and `eng-state/` to the target's `.git/info/exclude`, so they never appear in your `git status`; the `agents`/`commands` symlinks point into the shell and are not committed either. A pre-existing **real** file of the same name is *skipped with a warning*, never overwritten — the shell will not clobber an existing `.claude/`.
+
+**Invocation — `claude-eng` or plain `claude`.** The `claude-eng` PATH wrapper (from Install) works from anywhere. Inside a registered target you can also just run `claude`: the hooks self-locate the shell through the `.claude/eng-shell-root` binding symlink, so no global `CLAUDE_ENG_SHELL_ROOT` env is needed (SPEC §3.2.1).
+
+**`/onboard` (one-time, read-only).** Run it right after registering. It reports six checks — upstream/fork, push permission, SSOT files, `.github/`, branch protection, CI — each ✓/✗, makes **no automatic changes**, and ends with recommended next actions. A ✗ (e.g. the repo is a fork, or you lack push permission — the shell is upstream-only) is your cue to fix the environment before `/file-issue`.
+
+> **dir-mode mutates the target.** Unlike everything above, `/onboard-dir-mode` is not a free toggle: it opens a **PR into your repo** adding issue templates, mirroring workflows, and a changelog substrate, and it creates labels + a GitHub Project. Adopt it deliberately — full flow in [docs/DIR_MODE_FLOW.md](docs/DIR_MODE_FLOW.md).
+
 ## How the loop runs
 
 Two operating layers, both following the same **generate → review → gated approval → audit** pattern:
@@ -99,6 +113,6 @@ The shell version is a single [semver](https://semver.org) 0.x line in the top-l
 ## Verify
 
 ```bash
-./scripts/test/smoke.sh           # 547 assertions across hooks, helpers, slash commands
+./scripts/test/smoke.sh           # 733 assertions across hooks, helpers, slash commands
 ./scripts/build_toc.sh --check    # SPEC.md TOC freshness
 ```
