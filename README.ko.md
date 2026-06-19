@@ -41,6 +41,20 @@ claude-eng
 ./scripts/register.sh ~/code/<repo>     # or: claude-eng ~/code/<repo> — an unregistered path prompts to register
 ```
 
+## Adopting it on your repo
+
+위의 루프가 실제 프로젝트에서 매끄럽게 돌기 전에, 알아 두면 좋은 네 가지가 있습니다.
+
+**전제조건(Prerequisites).** `bootstrap.sh`가 확인하는 의존성(`git`·`gh`·`jq`, `python3` 권장) 외에, GitHub 흐름에는 PR을 열고 issue를 다룰 수 있는 토큰으로 `gh auth login`이 되어 있어야 합니다. **dir-mode**까지 도입하려면 추가로 `project` 토큰 scope(dir-mode GitHub Project를 `setup_project.sh`가 생성)와 workflow를 push할 권한(issue/Project 미러링이 `.github/workflows/`를 설치)이 필요합니다. 무엇이 빠졌는지는 `/onboard`가 알려 줍니다 — 첫 issue를 올리기 전에 인증부터 맞추세요.
+
+**Footprint — 내 저장소에 무엇이 생기고, 무엇이 추적되는가.** 주입(`clone-into.sh`·`register.sh`)은 target의 `.claude/` 아래에 **심링크**를 만듭니다: `eng-shell-root`(→ 정본 셸), `settings.local.json`(→ 셸의 injected hook), 그리고 `agents/`·`commands/*.md` 자산마다 하나씩 — 여기에 `eng-state/` 아래 per-project 레지스트리/상태 디렉터리가 더해집니다. 셸은 `eng-shell-root`·`settings.local.json`·`eng-state/`를 target의 `.git/info/exclude`에 추가하므로 이들은 `git status`에 절대 나타나지 않고, `agents`·`commands` 심링크는 셸 쪽을 가리킬 뿐 커밋되지 않습니다. 같은 이름의 **실제 파일**이 이미 있으면 *경고를 남기고 건너뜁니다* — 덮어쓰지 않으며, 기존 `.claude/`를 훼손하지 않습니다.
+
+**실행 방법 — `claude-eng` 또는 그냥 `claude`.** Install에서 만든 `claude-eng` PATH 래퍼는 어디서든 동작합니다. 등록된 target 안에서는 그냥 `claude`로 띄워도 됩니다: hook이 `.claude/eng-shell-root` 바인딩 심링크로 셸을 스스로 찾아가므로 전역 `CLAUDE_ENG_SHELL_ROOT` env가 필요 없습니다(SPEC §3.2.1).
+
+**`/onboard`(최초 1회, 읽기 전용).** 등록 직후에 실행하세요. upstream/fork, push 권한, SSOT 파일, `.github/`, branch protection, CI — 여섯 가지를 각각 ✓/✗로 보고하고, **자동으로 바꾸는 것은 없으며**, 권장 다음 행동으로 끝맺습니다. ✗(예: 저장소가 fork이거나 push 권한이 없음 — 셸은 upstream 전용)는 `/file-issue` 전에 환경을 손보라는 신호입니다.
+
+> **dir-mode는 target을 변경합니다.** 위의 것들과 달리 `/onboard-dir-mode`는 공짜 toggle이 아닙니다: issue 템플릿·미러링 workflow·changelog substrate를 추가하는 **PR을 내 저장소에 열고**, label과 GitHub Project를 생성합니다. 의식적으로 도입하세요 — 전체 흐름은 [docs/DIR_MODE_FLOW.md](docs/DIR_MODE_FLOW.md)에 있습니다.
+
 ## How the loop runs
 
 운영 계층은 두 가지이고, 둘 다 **generate → review → gated approval → audit**라는 같은 흐름을 따릅니다.
@@ -99,6 +113,6 @@ claude-eng
 ## Verify
 
 ```bash
-./scripts/test/smoke.sh           # 547 assertions across hooks, helpers, slash commands
+./scripts/test/smoke.sh           # 733+ assertions across hooks, helpers, slash commands
 ./scripts/build_toc.sh --check    # SPEC.md TOC freshness
 ```
