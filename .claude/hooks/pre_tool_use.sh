@@ -891,13 +891,19 @@ case "$tool" in
     # protected-branch write and still carries a subject; the secret/lint
     # sub-checks are harmless no-ops on an empty staged set. Excluding it
     # skipped all four gates in one flag.
-    # #403: gate the entry on strip_command_data so a literal "git commit" appearing
-    # only inside a quoted --body / heredoc DATA segment (e.g. a `gh issue edit
-    # --body "...git commit..."`) does not false-trip the arm — matching the sibling
-    # clean (:198) and merge (:333) arms. A real `git commit` invocation is a command
-    # segment, never only inside quoted body data, so this cannot under-block (the
-    # real subject still reaches extract_commit_subject below via the unstripped raw).
-    if printf '%s' "$(strip_command_data "$raw_cmd" full)" | grep -qE "${GIT_PREFIX}commit\b" ; then
+    # #403: gate the entry on strip_command_data (heredoc mode) so a literal
+    # "git commit" appearing only inside a heredoc DATA body (e.g. a
+    # `gh issue edit --body "$(cat <<'EOF' ... git commit ... EOF)"`) does not
+    # false-trip the arm — matching the sibling clean (:198) and merge (:333) arms,
+    # which use heredoc mode for the same reason. heredoc (NOT full) mode is the
+    # under-block-safe choice: `full` strips the interior of every double-quoted
+    # span, but bash executes command substitutions inside double quotes, so a real
+    # `git commit` in `"$(git commit …)"` would be hidden from the grep yet still
+    # run — heredoc mode leaves quoted substitutions intact, so a real invocation
+    # always matches. Residual (accepted): a plain double-quoted literal that merely
+    # mentions "git commit" with no heredoc still false-blocks; use --body-file or a
+    # heredoc body. The unstripped raw still feeds extract_commit_subject below.
+    if printf '%s' "$(strip_command_data "$raw_cmd" heredoc)" | grep -qE "${GIT_PREFIX}commit\b" ; then
       decided=
       if is_protected_branch; then
         should_skip branch && decided=1 || block branch "commit on protected branch ($(branch_label)) blocked"
