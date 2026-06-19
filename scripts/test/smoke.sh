@@ -9849,6 +9849,55 @@ else
   rm -rf "$S107_DIR" "$s107_clean"
 fi
 
+# ---------- §108 (#403): commit-arm does not false-positive on git-keyword DATA ----------
+# The protected-branch commit sub-arm (pre_tool_use.sh:894) must enter on a REAL
+# `git commit` invocation, NOT on the bytes "git commit" appearing inside a quoted
+# --body / heredoc DATA segment (e.g. a `gh issue edit --body "...git commit..."`).
+# Sibling arms (clean :198, merge :333) already neutralize DATA; this guards the
+# commit arm got the same treatment. 108a is RED until the fix; 108b is the
+# no-under-block guard (a real protected-branch commit still blocks, both pre/post).
+if ! command -v jq >/dev/null 2>&1; then
+  ng "108a: jq missing — cannot drive the commit-arm DATA test (#403)"
+  ng "108b: jq missing (#403)"
+else
+  S108_DIR=$(mktemp -d)
+  S108_TARGET="$S108_DIR/target"
+  mkdir -p "$S108_TARGET"
+  S108_TARGET=$(cd "$S108_TARGET" && pwd -P)
+  (cd "$S108_TARGET" && (git init -q -b main 2>/dev/null || { git init -q && git checkout -q -b main; })
+   git -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit --allow-empty -q -m init) >/dev/null 2>&1
+  printf '%s\n' "$S108_TARGET" >> "$SMOKE_REG"
+
+  s108_bash_run() {
+    local cmd="$1"
+    ( cd "$S108_TARGET" || exit 1
+      jq -nc --arg c "$cmd" '{tool_name:"Bash",tool_input:{command:$c}}' \
+        | CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT" bash "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" >/dev/null 2>&1 )
+    return $?
+  }
+
+  # 108a: a gh-issue-edit whose --body DATA contains the git+commit adjacency, run
+  #       on the protected (main) fixture → must be ALLOWED (rc=0). RED pre-fix.
+  s108_data_cmd='gh issue edit 1 --body "the high-frequency git commit action on the trunk"'
+  s108_bash_run "$s108_data_cmd"; s108a_rc=$?
+  if [ "$s108a_rc" = 0 ]; then
+    ok "108a: commit arm ignores 'git commit' inside a quoted --body (no false-positive) (#403)"
+  else
+    ng "108a: commit arm false-positives on 'git commit' in --body DATA (rc=$s108a_rc, want 0) (#403)"
+  fi
+
+  # 108b (no under-block): a REAL commit on the protected branch still blocks (rc=2),
+  #       both pre- and post-fix — the fix must not over-narrow.
+  s108_real_cmd="git commit -m 'feat(#403): real subject'"
+  s108_bash_run "$s108_real_cmd"; s108b_rc=$?
+  if [ "$s108b_rc" = 2 ]; then
+    ok "108b: a real git commit on a protected branch still blocks (no under-block) (#403)"
+  else
+    ng "108b: real protected-branch commit not blocked (rc=$s108b_rc, want 2) (#403)"
+  fi
+  rm -rf "$S108_DIR"
+fi
+
 # ---------- §357 AC1: live shared sinks untouched by the run ----------
 # A smoke run must add ZERO lines to the live audit log and ZERO entries to the
 # live scope registry (MISSION "shared code, per-project state" isolation, #357).
