@@ -891,7 +891,13 @@ case "$tool" in
     # protected-branch write and still carries a subject; the secret/lint
     # sub-checks are harmless no-ops on an empty staged set. Excluding it
     # skipped all four gates in one flag.
-    if printf '%s' "$cmd" | grep -qE "${GIT_PREFIX}commit\b" ; then
+    # #403: gate the entry on strip_command_data so a literal "git commit" appearing
+    # only inside a quoted --body / heredoc DATA segment (e.g. a `gh issue edit
+    # --body "...git commit..."`) does not false-trip the arm — matching the sibling
+    # clean (:198) and merge (:333) arms. A real `git commit` invocation is a command
+    # segment, never only inside quoted body data, so this cannot under-block (the
+    # real subject still reaches extract_commit_subject below via the unstripped raw).
+    if printf '%s' "$(strip_command_data "$raw_cmd" full)" | grep -qE "${GIT_PREFIX}commit\b" ; then
       decided=
       if is_protected_branch; then
         should_skip branch && decided=1 || block branch "commit on protected branch ($(branch_label)) blocked"
