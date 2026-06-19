@@ -48,7 +48,6 @@ out=$(
   git -C "$dir" log --no-merges -n "$lookback" --name-only \
       --format=$'\x01%H\x1f%s' 2>/dev/null \
   | awk -v sep1=$'\x01' -v sep2=$'\x1f' -v minc="$min_count" '
-    function flush() {}
     {
       if (substr($0,1,1) == sep1) {
         # commit header
