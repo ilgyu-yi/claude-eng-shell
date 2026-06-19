@@ -74,11 +74,15 @@ is_trusted_filer() {
   fi
 
   if [ -z "$assoc" ]; then
-    if [ -n "$repo" ]; then
-      assoc=$(gh issue view "$issue" --repo "$repo" --json authorAssociation -q '.authorAssociation' 2>/dev/null) || return 1
-    else
-      assoc=$(gh issue view "$issue" --json authorAssociation -q '.authorAssociation' 2>/dev/null) || return 1
-    fi
+    # #404: resolve via `gh api` (the issues REST endpoint's `author_association`),
+    # NOT `gh issue view --json authorAssociation`. The latter is rejected as an
+    # "Unknown JSON field" on gh versions that do not expose `authorAssociation`
+    # to `gh issue view --json`, which made trust silently unresolvable (every
+    # caller, incl. OWNER, hit the `|| return 1`). owner/name are already resolved
+    # above (for the cache key), so the REST path is built uniformly for both the
+    # explicit-repo and current-repo cases. A genuine failure still returns
+    # non-zero, so the /activate "unresolvable → park" guard holds (SPEC §5.12).
+    assoc=$(gh api "repos/$owner/$name/issues/$issue" -q '.author_association' 2>/dev/null) || return 1
     [ -z "$assoc" ] && return 1
     mkdir -p "$cache_dir" 2>/dev/null || true
     printf '%s\n' "$assoc" > "$cache_file" 2>/dev/null || true
