@@ -9849,6 +9849,74 @@ else
   rm -rf "$S107_DIR" "$s107_clean"
 fi
 
+# ---------- §108 (#403): commit-arm does not false-positive on heredoc DATA ----------
+# The protected-branch commit sub-arm (pre_tool_use.sh:894) must enter on a REAL
+# `git commit` invocation, NOT on the bytes "git commit" inside a heredoc DATA body
+# (e.g. `gh issue edit --body "$(cat <<'EOF' ... git commit ... EOF)"`, the real #403
+# trigger). The entry uses strip_command_data HEREDOC mode (matching clean :198 /
+# merge :333) — under-block-safe, because bash executes command substitutions inside
+# double quotes, so `full` mode (which strips quoted interiors) would HIDE a real
+# `"$(git commit)"` from the grep while bash still runs it. 108a: heredoc-body
+# false-positive allowed (RED pre-fix). 108b/108c: no-under-block guards (a real
+# plain commit AND a real commit inside a double-quoted substitution both still block).
+if ! command -v jq >/dev/null 2>&1; then
+  ng "108a: jq missing — cannot drive the commit-arm DATA test (#403)"
+  ng "108b: jq missing (#403)"
+else
+  S108_DIR=$(mktemp -d)
+  S108_TARGET="$S108_DIR/target"
+  mkdir -p "$S108_TARGET"
+  S108_TARGET=$(cd "$S108_TARGET" && pwd -P)
+  (cd "$S108_TARGET" && (git init -q -b main 2>/dev/null || { git init -q && git checkout -q -b main; })
+   git -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit --allow-empty -q -m init) >/dev/null 2>&1
+  printf '%s\n' "$S108_TARGET" >> "$SMOKE_REG"
+
+  s108_bash_run() {
+    local cmd="$1"
+    ( cd "$S108_TARGET" || exit 1
+      jq -nc --arg c "$cmd" '{tool_name:"Bash",tool_input:{command:$c}}' \
+        | CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT" bash "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" >/dev/null 2>&1 )
+    return $?
+  }
+
+  # 108a: a gh-issue-edit whose --body carries the git+commit token inside a HEREDOC
+  #       body, run on the protected (main) fixture → must be ALLOWED (rc=0). The
+  #       real #403 trigger. RED pre-fix.
+  sq="'"
+  s108_data_cmd="gh issue edit 1 --body \"\$(cat <<${sq}EOF${sq}
+prose that merely mentions a git commit invocation inside a heredoc body
+EOF
+)\""
+  s108_bash_run "$s108_data_cmd"; s108a_rc=$?
+  if [ "$s108a_rc" = 0 ]; then
+    ok "108a: commit arm ignores 'git commit' inside a heredoc --body (no false-positive) (#403)"
+  else
+    ng "108a: commit arm false-positives on 'git commit' in a heredoc --body (rc=$s108a_rc, want 0) (#403)"
+  fi
+
+  # 108b (no under-block): a REAL plain commit on the protected branch still blocks (rc=2).
+  s108_real_cmd="git commit -m 'feat(#403): real subject'"
+  s108_bash_run "$s108_real_cmd"; s108b_rc=$?
+  if [ "$s108b_rc" = 2 ]; then
+    ok "108b: a real plain git commit on a protected branch still blocks (no under-block) (#403)"
+  else
+    ng "108b: real protected-branch commit not blocked (rc=$s108b_rc, want 2) (#403)"
+  fi
+
+  # 108c (no under-block — the security-review case): a real commit inside a
+  #       DOUBLE-QUOTED command substitution still blocks (rc=2). heredoc mode leaves
+  #       "$(...)" intact, so the grep still sees the live invocation; `full` mode
+  #       would have stripped it and let a real protected-branch commit slip (rc=0).
+  s108_subst_cmd='echo "$(git commit --allow-empty -m sneaky)"'
+  s108_bash_run "$s108_subst_cmd"; s108c_rc=$?
+  if [ "$s108c_rc" = 2 ]; then
+    ok "108c: a real commit inside a double-quoted \$() substitution still blocks (no under-block) (#403)"
+  else
+    ng "108c: commit in double-quoted \$() slipped past the protected-branch gate (rc=$s108c_rc, want 2) (#403)"
+  fi
+  rm -rf "$S108_DIR"
+fi
+
 # ---------- §357 AC1: live shared sinks untouched by the run ----------
 # A smoke run must add ZERO lines to the live audit log and ZERO entries to the
 # live scope registry (MISSION "shared code, per-project state" isolation, #357).
