@@ -13,6 +13,8 @@ This table is the user-facing catalog for the shell's environment-variable and s
 | Status cache TTL | — | `STATUS_CACHE_TTL` | `5` | Seconds before re-querying `gh` from `_status_collect` (§5.5) |
 | Session-start fetch TTL | — | `SESSION_START_FETCH_TTL` | `21600` | Seconds before the shell-behind `git fetch` runs again (§6.5) |
 | Session-start fetch timeout | — | `SESSION_START_FETCH_TIMEOUT` | `5` | Per-fetch `timeout(1)` bound when the TTL elapses (§6.5) |
+| Friction-advisory TTL | — | `SESSION_START_FRICTION_TTL` | `21600` | Seconds before the SessionStart friction advisory recomputes (§6.5(d)) |
+| Friction-advisory timeout | — | `SESSION_START_FRICTION_TIMEOUT` | `3` | Per-compute `timeout(1)` bound on the friction advisory's reader run (§6.5(d)) |
 | Commit-time lint timeout | — | `CLAUDE_ENG_LINT_TIMEOUT` | `30` | Bound on the commit gate's lint (§6.1) |
 | Stop-hook throttle | — | `CLAUDE_ENG_STOP_THROTTLE` | `5` | Suggest `/review` every Nth response from the Stop hook (§6.3) |
 | Unattended park log | — | `SHIP_PARK_LOG_PATH` | `.claude/state/unattended-park.log` | Where `/ship` appends park entries in `unattended` mode (§5.7.1) |
