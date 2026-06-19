@@ -2771,13 +2771,13 @@ fi
 CONFIG_MD="$SHELL_ROOT/docs/CONFIG.md"
 if [ -f "$CONFIG_MD" ]; then
   missing=""
-  for v in SESSION_START_FETCH_TIMEOUT CLAUDE_ENG_STOP_THROTTLE SHIP_PARK_LOG_PATH PR_CACHE_REPO; do
+  for v in SESSION_START_FETCH_TIMEOUT SESSION_START_FRICTION_TTL SESSION_START_FRICTION_TIMEOUT CLAUDE_ENG_STOP_THROTTLE SHIP_PARK_LOG_PATH PR_CACHE_REPO; do
     if ! grep -q "$v" "$CONFIG_MD"; then
       missing="$missing $v"
     fi
   done
   if [ -z "$missing" ]; then
-    ok "config-toggles: all four env vars documented in docs/CONFIG.md (#15)"
+    ok "config-toggles: all env vars documented in docs/CONFIG.md (#15, #398)"
   else
     ng "config-toggles: env vars missing from docs/CONFIG.md catalog:$missing (#15)"
   fi
