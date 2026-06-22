@@ -37,8 +37,12 @@ export CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT"
 # before the §4 registry backup, so it reflects the truly untouched live state.
 S357_LIVE_AUDIT="$SHELL_ROOT/.claude/audit/audit.jsonl"
 S357_LIVE_REG="$SHELL_ROOT/.claude/state/registry.txt"
-s357_audit_before=$(wc -l < "$S357_LIVE_AUDIT" 2>/dev/null | tr -d ' '); [ -z "$s357_audit_before" ] && s357_audit_before=0
-s357_reg_before=$(wc -l < "$S357_LIVE_REG" 2>/dev/null | tr -d ' '); [ -z "$s357_reg_before" ] && s357_reg_before=0
+# Guard with [ -f ] before the `< file` redirect: bash applies `< file` BEFORE
+# `2>/dev/null`, so on an absent path the open-failure reaches the real stderr
+# unsuppressed (a spurious "No such file" line, #417). An absent sink snapshots
+# as 0 — the assertion semantics are unchanged.
+s357_audit_before=0; [ -f "$S357_LIVE_AUDIT" ] && s357_audit_before=$(wc -l < "$S357_LIVE_AUDIT" | tr -d ' ')
+s357_reg_before=0; [ -f "$S357_LIVE_REG" ] && s357_reg_before=$(wc -l < "$S357_LIVE_REG" | tr -d ' ')
 
 # §357 — pin ALL fixture hook fires to an isolated ephemeral state dir for the
 # whole run. eng_state_dir() honors ENG_STATE_DIR_OVERRIDE as top priority, so
@@ -10096,8 +10100,8 @@ fi
 # else the assertion would be vacuous (it would compare the isolated dir to
 # itself). On pre-#357 code this FAILS (fixture fires append to the live audit);
 # after the whole-run override it passes (every fire resolves to $SMOKE_STATE).
-s357_audit_after=$(wc -l < "$S357_LIVE_AUDIT" 2>/dev/null | tr -d ' '); [ -z "$s357_audit_after" ] && s357_audit_after=0
-s357_reg_after=$(wc -l < "$S357_LIVE_REG" 2>/dev/null | tr -d ' '); [ -z "$s357_reg_after" ] && s357_reg_after=0
+s357_audit_after=0; [ -f "$S357_LIVE_AUDIT" ] && s357_audit_after=$(wc -l < "$S357_LIVE_AUDIT" | tr -d ' ')
+s357_reg_after=0; [ -f "$S357_LIVE_REG" ] && s357_reg_after=$(wc -l < "$S357_LIVE_REG" | tr -d ' ')
 if [ "$s357_audit_after" = "$s357_audit_before" ] && [ "$s357_reg_after" = "$s357_reg_before" ]; then
   ok "357: smoke run left the live audit log + scope registry untouched (#357)"
 else
