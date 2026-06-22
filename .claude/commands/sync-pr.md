@@ -13,3 +13,4 @@ Update the PR body. External-edit detection is real and persistent — see SPEC 
    - Tidy stale items.
    - If history is needed, keep one line per entry in a separate "Changelog" section.
    - Editorial, not append-only.
+7. **Post-sync divergence advisory** — after a successful sync, run `/replan-check` (SPEC §5.26): the body was just curated, so it's the natural cadence to compare the Plan against the actual diff and re-invoke `planner` on *structural* divergence. Advisory only — never blocks. Skip if no PR/plan exists yet.
