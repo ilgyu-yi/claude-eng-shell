@@ -10163,6 +10163,36 @@ else
   ng "112: mutation harness contract violated:$s112_why (#423)"
 fi
 
+# ---------- §113: /replan-check divergence checkpoint contract (#427) ----------
+# Placed before §110 (README floor, runs last by design). Static greps on the
+# command + helper — the divergence JUDGMENT is LLM (uncheckable here); these pin
+# the contract surface: the discriminator phrases, helper delegation, the
+# mechanical-facts + fail-open helper shape, and the /sync-pr reference.
+s113_cmd="$SHELL_ROOT/.claude/commands/replan-check.md"
+s113_helper="$SHELL_ROOT/.claude/hooks/helpers/replan_check.sh"
+s113_sync="$SHELL_ROOT/.claude/commands/sync-pr.md"
+s113=1; s113_why=""
+if [ ! -f "$s113_cmd" ]; then
+  s113=0; s113_why="${s113_why}command-missing;"
+else
+  grep -qi 'structural' "$s113_cmd"            || { s113=0; s113_why="${s113_why}no-structural-term;"; }
+  grep -qiE 'cosmetic|mechanical' "$s113_cmd"  || { s113=0; s113_why="${s113_why}no-cosmetic-clause;"; }
+  grep -qiE 'unreachable|reachab' "$s113_cmd"  || { s113=0; s113_why="${s113_why}no-ac-reachability;"; }
+  grep -q 'replan_check' "$s113_cmd"           || { s113=0; s113_why="${s113_why}cmd-no-delegate;"; }
+fi
+if [ ! -f "$s113_helper" ]; then
+  s113=0; s113_why="${s113_why}helper-missing;"
+else
+  grep -q 'git diff --name-only' "$s113_helper" || { s113=0; s113_why="${s113_why}no-touched-files-fact;"; }
+  grep -qi 'unavailable' "$s113_helper"          || { s113=0; s113_why="${s113_why}no-fail-open;"; }
+fi
+grep -q 'replan-check' "$s113_sync" 2>/dev/null || { s113=0; s113_why="${s113_why}sync-pr-no-ref;"; }
+if [ "$s113" = 1 ]; then
+  ok "113: /replan-check declares the structural-vs-cosmetic discriminator + AC-reachability, delegates to a fail-open mechanical-facts helper, and is referenced by /sync-pr (#427)"
+else
+  ng "113: /replan-check contract violated:$s113_why (#427)"
+fi
+
 # ---------- §110: README assertion-count floor (#409) ----------
 # README's "Verify" block advertises an assertion count as "<N>+". A count that
 # OVERSTATES coverage (claims more than the suite runs) is the misleading
