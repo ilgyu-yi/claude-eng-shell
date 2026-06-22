@@ -28,11 +28,11 @@ Issue close-as-completed IS the Status=Completed signal. The Project Item's Stat
 
 3. **Read the Directive's success signals** from its body (the `## Success signals` section authored at `/file-directive` time).
 
-4. **Reviewer gate** — invoke `activation-reviewer` (SPEC §4.9) on the completion claim. Pass:
+4. **Reviewer gate** — Directive completion is a **high-asymmetry** decision (SPEC §4.11): a wrong "complete" is irreversible (it closes the Directive). Source `$CLAUDE_ENG_SHELL_ROOT/.claude/hooks/helpers/blast_radius.sh`; `is_high_asymmetry directive-completion` holds, so run the evidence evaluation as an **N=3 independent majority vote** of `activation-reviewer` — three independent, worktree-isolated, artifact-only invocations with no shared context, **2 of 3** pass required. (On a `safe_source` miss, degrade to a single `activation-reviewer` with an `audit_log warn reviewer-tier` — never a lockout.) Each invocation gets:
    - The Directive body (with success signals as written).
    - The list of linked Execution Issues + their states + AC ticks.
 
-   Parse the verdict per `/file-directive` step 2 dispatch.
+   Parse each verdict per `/file-directive` step 2 dispatch; the **majority** verdict is the gate. A non-majority (fewer than 2 pass) leaves the Issue open.
 
    On `reject` (evidence insufficient): stop. Issue stays open. Audit `directive-complete blocked "<reason>"`. Surface the verdict reason to the user. **Reject-audit emission** (SPEC §6.1, Directive #356 signal 3) — also emit one categorized reject record: source `hookrt.sh` + `safe_source helpers/reviewer_audit.sh reviewer-reject`, then `reviewer_reject_audit activation <reason-class> <issue-#>`, mapping the reviewer's reason to the nearest **reason-class** token (`schema-incomplete` / `unverifiable-ac` / `scope-bleed` / `mission-misfit` / `conflict` / `evidence-insufficient`). Observability only.
 
