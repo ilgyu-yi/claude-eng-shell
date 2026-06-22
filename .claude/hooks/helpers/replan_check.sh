@@ -1,7 +1,9 @@
 # shellcheck shell=bash
 # helpers/replan_check.sh — surface the mechanical facts the /replan-check
 # divergence judgment needs: the actually-touched files, the linked issue's
-# acceptance criteria, and the PR-body Plan/Checklist/Key-context. The JUDGMENT
+# acceptance criteria, and the PR-body Plan/Checklist/Key-context/Out-of-scope
+# (a touched file the Plan declared Out-of-scope is a strong structural signal).
+# The JUDGMENT
 # (structural vs cosmetic, AC-reachability) stays in the skill (LLM), per the
 # /recall -> recall.sh split. Fail-open: any git/gh error prints a single
 # "...unavailable" line and never errors out — this is an advisory, never a gate.
@@ -32,7 +34,7 @@ replan_check_facts() {
   if [ -z "$body" ]; then
     printf '## plan / checklist / key context\nreplan-check: PR body unavailable\n\n'
   else
-    printf '## plan / checklist / key context (from PR body)\n'
+    printf '## plan / checklist / key context / out-of-scope (from PR body)\n'
     printf '%s\n' "$body" | awk '
       /^## (Plan|Checklist|Key context|Out of scope)/ { p=1; print; next }
       /^## / { p=0 }
