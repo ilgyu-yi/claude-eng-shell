@@ -7662,6 +7662,60 @@ else
   ng "70i: branch named 'all' should be allowed (refset regex needs -- prefix) (#204)"
 fi
 
+# §70j–§70o: composite-command segment isolation (#437). The force-push arm now
+# isolates the actual git-push segment(s) via push_segments (mirroring the #366
+# branch arm), so a force flag / protected token / target in a SIBLING non-push
+# segment no longer false-trips — while every genuine-block path is preserved
+# (the falsifiability arm).
+
+# §70j: the motivating false-positive — a non-protected force-push composed with
+# a PR-create that names the default branch in a SIBLING segment → ALLOW.
+if [ "$(hook_run 'git push --force-with-lease origin my-feature && gh pr create --base main')" = "0" ]; then
+  ok "70j: non-protected force-push + sibling 'gh pr create --base main' allowed (#437)"
+else
+  ng "70j: composite force-push with a sibling protected token should NOT block (#437)"
+fi
+
+# §70k: genuine protected force-push in a composite STILL blocks (falsifiability).
+s70k=$(cd "$TMP/fake" && fake_input "Bash" "{\"command\":\"git push --force origin main && gh pr create --base main\"}" \
+  | "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" 2>&1)
+s70k_rc=$?
+if [ "$s70k_rc" = 2 ] && printf '%s' "$s70k" | grep -qi protected; then
+  ok "70k: protected force-push still blocks in a composite; names protected (#437)"
+else
+  ng "70k: protected force-push in a composite must still block (rc=$s70k_rc) (#437)"
+fi
+
+# §70l: bare force-push composed with a sibling STILL blocks (target unverifiable).
+if [ "$(hook_run 'git push --force && gh pr create --base feature')" = "2" ]; then
+  ok "70l: bare force-push in a composite still blocks (#437)"
+else
+  ng "70l: bare force-push in a composite must still block (#437)"
+fi
+
+# §70m: --mirror force-push composed with a sibling STILL blocks (targets all refs).
+if [ "$(hook_run 'git push --force --mirror origin x && gh pr create --base feature')" = "2" ]; then
+  ok "70m: --mirror force-push in a composite still blocks (#437)"
+else
+  ng "70m: --mirror force-push in a composite must still block (#437)"
+fi
+
+# §70n: multi-push-segment — block if ANY force-bearing push segment is protected,
+# even when an earlier segment is a legitimate non-protected force-push.
+if [ "$(hook_run 'git push --force-with-lease origin feat && git push --force origin main')" = "2" ]; then
+  ok "70n: multi-push-segment blocks when a later segment force-pushes protected (#437)"
+else
+  ng "70n: any protected force-push segment must block (#437)"
+fi
+
+# §70o: a force flag living ONLY in a non-push sibling (not in the git-push
+# segment) → the push itself is non-force/non-protected → ALLOW (entry .*-span fix).
+if [ "$(hook_run 'git push origin my-feature && echo --force-with-lease')" = "0" ]; then
+  ok "70o: force flag in a sibling non-push segment does not make it a force-push (#437)"
+else
+  ng "70o: sibling-only force flag should not trigger the force-push gate (#437)"
+fi
+
 # ---------- 71. escape-hatch reference docs route in-harness blocks correctly (#217) ----------
 # SPEC §7 has TWO escape forms; the leading env-prefix is non-functional in the
 # live Claude Code Bash tool (consumed as subprocess env, #206), so the canonical
