@@ -393,6 +393,95 @@ A context **clear** is the bluntest narrowing tool (§3.7) — it discards the w
 
 **Advisory → affordance migration (this section's reinforcement).** Per §6.0 P3, a guidance-only lever is hardened into an affordance once the pattern proves out. The **targeted-reads** lever — guidance-only above — gains a positive **PostToolUse `Read` nudge** (§6.2): when a `Read` loads a whole file (no `offset`/`limit`) above a line threshold, the hook emits a one-line, non-blocking suggestion to use a targeted `Read --offset/--limit` or delegate the search to `explorer`. The face is **positive, not a block**: a missed narrowing nudge is ignorable at no cost (§6.0 P1 cost-asymmetry), so the lever guides rather than refuses. The other levers stay at their current faces; this section describes the present state, it does not reclassify them.
 
+### 1.9 Harness-overlap classification
+
+The shell runs on top of a Claude Code harness that **improves under use** and natively absorbs more of the generic agent-support machinery over time (context compaction, deferred/lazy tool loading, excerpt-reading search agents, native subagents, plan mode, task tracking, file-based memory). Treat the harness as a **rising floor** (MISSION "The mechanism"): a shell mechanism that merely re-does what the harness now does natively is redundant cost, while the shell's durable, non-redundant value concentrates in what the harness — which must stay general — does *not* encode. This section records, as standing doctrine, each mechanism's **posture** toward that floor. It is a classification, **not a removal mandate**: ceding is a forward-discipline signal (retire via a separate Issue, weighed against safety value), never an in-place deletion (#449).
+
+**Posture vocabulary** (exactly one per mechanism):
+- `cede-to-harness` — the harness now does this natively; the shell's version is redundant and is a candidate for retirement (forward discipline, not deleted here).
+- `keep-as-policy` — opinionated GitHub-engineering policy the harness does not encode (and should not, staying general); the shell is the only source of it.
+- `keep-as-safety-redundancy` — a deliberately redundant backstop for a high-cost-of-wrong (irreversible / shared-history-corrupting) action, kept even where the harness offers a partial native guard, per the §6.0 cost-asymmetry principle.
+
+Coverage is **parity-guarded** (smoke §116): this section must classify every mechanism enumerated in §1.8 (narrowing levers), §4 (subagents), §5 (slash commands), and §6.1 (hook matchers) — a new mechanism in any of those families fails smoke until it gains a row here. The classification references each mechanism's home section by anchor; it adds no parallel contract content (§9).
+
+**Narrowing levers (§1.8 — 5):**
+
+| Lever | Posture | Rationale |
+|-------|---------|-----------|
+| Subagent isolation (§1.8 / §1.5) | `cede-to-harness` | The harness ships native subagents (Agent/Task, fork, worktree, parallel) and an excerpt-reading search agent; running wide work in a separate window is now a harness primitive. |
+| Doc → Test → Code phasing handoff (§1.8 / §1.2) | `keep-as-policy` | The harness has no task-phase model; consuming the prior phase's artifact instead of the conversation is engineering policy the shell imposes. |
+| Artifact-only reviewers (§1.8 / §4.5–§4.9) | `keep-as-policy` | "Judge from the diff / PR / issue / MISSION, never the conversation" is a review discipline, not a harness capability. |
+| Targeted SPEC / file reads (§1.8 / §1.3) | `cede-to-harness` | The harness now narrows input natively — deferred/lazy tool loading, excerpt-reading Explore, targeted reads — so the generic form of this lever is harness-absorbed. |
+| Plan-as-manifest (§1.8 / §4.1) | `keep-as-policy` | The persistent, task-scoped manifest is the PR body / GitHub artifact (constraint-isomorphic durable memory), not the harness's ephemeral plan-mode buffer. |
+
+**Subagents (§4 — 9):**
+
+| Subagent | Posture | Rationale |
+|----------|---------|-----------|
+| planner (§4.1) | `keep-as-policy` | Produces the structured PR-body Plan (alternatives + target base) that rides the GitHub flow; overlaps plan mode only at the primitive level, not at the artifact. |
+| explorer (§4.2) | `cede-to-harness` | The native Explore agent already does read-only, excerpt-level wide search; explorer duplicates it. |
+| doc-writer (§4.3) | `keep-as-policy` | The Doc-phase role exists only because of the Doc→Test→Code policy; no harness equivalent. |
+| test-writer (§4.4) | `keep-as-policy` | The failing-test-first Test-phase role is engineering policy, not a harness feature. |
+| code-reviewer (§4.5) | `keep-as-policy` | The native review skill is a tool; the shell's reviewer is a *gate* in the /ship flow judging from artifact + MISSION + issue. |
+| security-reviewer (§4.6) | `keep-as-policy` | Overlaps the native security-review skill at the tool level, but is wired as a conditional /ship gate — the gate integration is the policy. |
+| issue-reviewer (§4.7) | `keep-as-policy` | The rationale-triad gate on a proposed issue has no harness analogue. |
+| plan-reviewer (§4.8) | `keep-as-policy` | The approach-check gate on a planner output has no harness analogue. |
+| activation-reviewer (§4.9) | `keep-as-policy` | The dir-mode substance gate (Directive / Execution / Initiative) is pure shell policy. |
+
+**Slash commands (§5 — 25):**
+
+| Command | Posture | Rationale |
+|---------|---------|-----------|
+| /bootstrap-repo (§5.0) | `keep-as-policy` | Stage-0 seeding of a GitHub-standard repo; not a harness concern. |
+| /onboard (§5.1) | `keep-as-policy` | GitHub-standard readiness check; shell-specific. |
+| /file-issue (§5.2) | `keep-as-policy` | Issue-as-durable-memory filing with a rationale gate; GitHub-flow policy. |
+| /work-on (§5.3) | `keep-as-policy` | issue → branch → draft PR → planner orchestration; the core GH flow. |
+| /sync-pr (§5.4) | `keep-as-policy` | PR-as-living-doc curation; shell-specific. |
+| /status (§5.5) | `keep-as-policy` | Work-state summary over the GH-flow artifacts, not the harness's generic status. |
+| /review (§5.6) | `keep-as-policy` | Invokes the reviewer gates as a flow step; native review skills are tools, this is the gate. |
+| /ship (§5.7) | `keep-as-policy` | The ready → CI → merge-or-park gate; the heart of the flow, no harness equivalent. |
+| /adr (§5.8) | `keep-as-policy` | Architecture Decision Record authoring; GitHub-repo doctrine. |
+| /audit (§5.9) | `keep-as-policy` | Query over the shell's own audit log; shell-specific. |
+| /file-directive (§5.10) | `keep-as-policy` | Dir-mode planning tier; no harness analogue. |
+| /list-directives (§5.11) | `keep-as-policy` | Dir-mode listing; shell-specific. |
+| /activate (§5.12) | `keep-as-policy` | Proposed → Active lifecycle gate; shell policy. |
+| /complete-directive (§5.13) | `keep-as-policy` | Directive closeout with an evidence gate; shell policy. |
+| /link-directive (§5.14) | `keep-as-policy` | Execution ↔ Directive parenting; dir-mode policy. |
+| /reflect (§5.15) | `keep-as-policy` | Post-merge reflection on the parent Directive; shell-specific. |
+| /revise-directive (§5.16) | `keep-as-policy` | Directive body revision with archive; shell policy. |
+| /block-directive (§5.17) | `keep-as-policy` | Directive blocking lifecycle; shell policy. |
+| /release (§5.20) | `keep-as-policy` | Changelog consolidation + release PR; GitHub-flow policy. |
+| /consume-initiative (§5.21) | `keep-as-policy` | Initiative → Directive extraction; dir-mode policy. |
+| /initiative-feedback (§5.22) | `keep-as-policy` | Upstream escalation comments; shell policy. |
+| /changelog (§5.23) | `keep-as-policy` | Per-PR changelog fragment authoring; release-backbone policy. |
+| /flush (§5.24) | `keep-as-policy` | The active → archived distillation before a clear — the task-boundary handoff half of the narrowing differentiator; overlaps the harness's raw /clear only at the primitive level. |
+| /recall (§5.25) | `keep-as-policy` | Episodic retrieval over the project's GitHub decision record (issues / PRs / ADRs), a different substrate from the harness's private memory recall. |
+| /replan-check (§5.26) | `keep-as-policy` | Plan-vs-diff divergence check; shell policy. |
+
+**Hook matchers (§6.1 — 17):**
+
+| Matcher | Posture | Rationale |
+|---------|---------|-----------|
+| branch (§6.1) | `keep-as-safety-redundancy` | A protected-branch commit/push corrupts shared history (irreversible); a backstop above any harness permission prompt. |
+| force-push (§6.1) | `keep-as-safety-redundancy` | Force-push to a protected/ambiguous ref is irreversible history loss; deliberate redundancy. |
+| secret (§6.1) | `keep-as-safety-redundancy` | A leaked secret is irreversible once pushed; staged-diff scanning backstops harness sandbox/permission guards. |
+| destructive (§6.1) | `keep-as-safety-redundancy` | `git reset --hard` / `git clean -f` discard work irrecoverably; redundancy above the harness's destructive-command prompts. |
+| sensitive (§6.1) | `keep-as-safety-redundancy` | Editing `.env` / `*.pem` / credentials risks irreversible leak; backstops the harness's partial sensitive-file handling. |
+| amend (§6.1) | `keep-as-safety-redundancy` | `--amend` after push rewrites published history; an irreversible-action backstop. |
+| no-verify (§6.1) | `keep-as-safety-redundancy` | `--no-verify` strips the very gates that catch irreversible mistakes; kept as a meta-backstop. |
+| backmerge (§6.1) | `keep-as-safety-redundancy` | A wrong-direction protected→feature merge can corrupt shared history; a redundant guard. |
+| ac-closeout (§6.1) | `keep-as-policy` | "No merge with unchecked AC" is dir-mode completion policy; no harness analogue. |
+| commit-format (§6.1) | `keep-as-policy` | Conventional-commit subject enforcement is repo policy. |
+| merge-strategy (§6.1) | `keep-as-policy` | `--merge`-only to the default branch is a GitHub-flow policy choice. |
+| proposed-protect (§6.1) | `keep-as-policy` | Block branching a Proposed / Directive Issue — lifecycle policy. |
+| label-parent-consistency (§6.1) | `keep-as-policy` | Issue type ↔ parent-marker consistency is dir-mode schema policy. |
+| initiative-readonly (§6.1) | `keep-as-policy` | Initiatives are read-only to the shell — boundary policy (MISSION "Explicitly NOT goals"). |
+| trusted-filer-mutate (§6.1) | `keep-as-policy` | Filer-trust mutation rules are dir-mode governance policy. |
+| out-of-scope (§6.1) | `keep-as-policy` | The registry-scope boundary (edit/destructive outside registered paths) is a shell-specific containment policy. |
+| format (§6.1) | `keep-as-policy` | Staged-diff format enforcement is repo policy. |
+
+**Reading of the result.** The classification is lopsided by design, and that lopsidedness *is* the doctrine: the narrowing-*primitive* levers (subagent isolation, targeted reads) and the generic search subagent (explorer) cede to the harness, while every GitHub-engineering policy — the flow commands, the dir-mode lifecycle, the enforcement matchers — and the constraint-isomorphic durable-memory levers (Plan-as-manifest, /flush, /recall) stay. The shell's non-redundant value lives where the harness, staying general, structurally cannot reach: opinionated engineering policy, high-asymmetry safety redundancy, and GitHub-artifact-as-durable-memory.
+
 ---
 
 ## 2. Engineering flow
@@ -1837,11 +1926,12 @@ claude-eng-shell/
 │   ├── .gitkeep
 │   └── README.md
 │
-└── docs/                             ← 6 thin-pointer digests (§9); count-guarded (smoke §103)
+└── docs/                             ← 7 thin-pointer digests (§9); count-guarded (smoke §103)
     ├── CONFIG.md
     ├── DIR_MODE_FLOW.md              ← dir-mode flow digest
     ├── ENGINEERING_FLOW.md           ← flow diagram + step details
     ├── ESCAPE_HATCH.md
+    ├── HARNESS_OVERLAP.md            ← harness-overlap classification pointer (§1.9)
     ├── SUBAGENTS.md                  ← nine-agent usage guide
     └── TROUBLESHOOTING.md            ← common blocks + fixes
 ```
