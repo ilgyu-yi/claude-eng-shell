@@ -779,53 +779,74 @@ case "$tool" in
     #     non-protected, block. Escape: SKIP_HOOKS=force-push.
     if printf '%s' "$cmd" | grep -qE "${GIT_PREFIX}push\b.*(\-f\b|\-\-force\b|\-\-force-with-lease\b)"; then
       decided=
-      # Protected-token presence + ref-set flags, computed off the `if printf|grep`
-      # form so the §39b structural sweep counts only the one matcher-entry line
-      # above. Case-insensitive (`-i`): a remote `MAIN`/`Main` collides with `main`
-      # on case-insensitive filesystems (default macOS/Windows), so a case-folded
-      # name is still a protected-clobber path.
-      fp_protected=
-      printf '%s' "$cmd" | grep -qiE "\b(${PROTECTED_BRANCH_PATTERN})\b" && fp_protected=1
-      # --mirror/--all/--branches push EVERY ref (incl. protected) with no single
-      # verifiable target — and --mirror deletes remote refs absent locally. They
-      # carry no explicit branch to check, so they fall under the same
-      # "target can't be confirmed non-protected → block" fail-safe as a bare push.
-      fp_refset=
-      printf '%s' "$cmd" | grep -qE '(^|[[:space:]])--(mirror|all|branches)([[:space:]]|=|$)' && fp_refset=1
-      if should_skip force-push; then
+      # Isolate the actual git-push SEGMENT(s) (heredoc-stripped) so a force flag,
+      # protected token, or target named in a SIBLING segment (gh pr create --base
+      # main, a heredoc body) can't leak into the checks below (#437, mirroring
+      # the #366 branch arm). Every refinement is a value-assignment grep — never
+      # an `if printf|grep -qE` — so the §39b structural sweep counts only the one
+      # matcher-entry line above.
+      # Collapse backslash-newline line-continuations (awk: join a line ending in
+      # `\` with the next) BEFORE segmenting, else a `git \<nl> push \<nl> --force`
+      # continuation splits across newlines and no segment carries `git push`
+      # together (#17 regression guard). Heredoc bodies are already stripped.
+      fp_force_segs=$(push_segments "$(strip_command_data "$raw_cmd" heredoc | awk '{ if (sub(/\\$/,"")) printf "%s ", $0; else print }')" | grep -E "(\-f\b|\-\-force\b|\-\-force-with-lease\b)")
+      if [ -z "$fp_force_segs" ]; then
+        # The force flag lived only in a non-push sibling segment → not a
+        # force-push → allow (silent).
         decided=1
-      elif [ -n "$fp_protected" ]; then
-        block force-push "force push to a protected branch (${PROTECTED_BRANCH_PATTERN//|/, }) blocked"
-      elif [ -n "$fp_refset" ]; then
-        block force-push "force push with --mirror/--all/--branches is blocked: it targets every ref (including protected branches) with no verifiable single target. Name one branch: 'git push --force-with-lease origin <branch>'. Or SKIP_HOOKS=force-push SKIP_REASON='<why>'."
       else
-        # Count positional (non-flag) tokens after `push`. An explicit
-        # <remote> <refspec> pair (>=2 positionals) means the target is named
-        # and — with no protected token present above — verified non-protected.
-        # Skip values of the value-taking push flags so they aren't miscounted
-        # as positionals (would over-count and wrongly allow a bare push).
-        fp_positionals=0
-        fp_seen_push=
-        fp_skip_next=
-        read -ra fp_arr <<< "$cmd"
-        for fp_tok in "${fp_arr[@]}"; do
-          if [ -z "$fp_seen_push" ]; then
-            [ "$fp_tok" = push ] && fp_seen_push=1
-            continue
-          fi
-          if [ -n "$fp_skip_next" ]; then fp_skip_next=; continue; fi
-          case "$fp_tok" in
-            -o|--push-option|--repo|--receive-pack|--exec) fp_skip_next=1 ;;
-            -*) ;;  # flag — not a positional
-            *) fp_positionals=$((fp_positionals + 1)) ;;
-          esac
-        done
-        if [ "$fp_positionals" -ge 2 ]; then
-          # Explicit <remote> <refspec>, non-protected → the rebase-pull tail. Allow.
-          mark_allow force-push
+        # Protected token / ref-set checked against the force-bearing push
+        # segment(s) ONLY. Case-insensitive (`-i`): a remote `MAIN`/`Main`
+        # collides with `main` on case-insensitive filesystems — still a
+        # protected-clobber path.
+        fp_protected=
+        printf '%s\n' "$fp_force_segs" | grep -qiE "\b(${PROTECTED_BRANCH_PATTERN})\b" && fp_protected=1
+        # --mirror/--all/--branches push EVERY ref (incl. protected) with no single
+        # verifiable target — same fail-safe as a bare push.
+        fp_refset=
+        printf '%s\n' "$fp_force_segs" | grep -qE '(^|[[:space:]])--(mirror|all|branches)([[:space:]]|=|$)' && fp_refset=1
+        if should_skip force-push; then
           decided=1
+        elif [ -n "$fp_protected" ]; then
+          block force-push "force push to a protected branch (${PROTECTED_BRANCH_PATTERN//|/, }) blocked"
+        elif [ -n "$fp_refset" ]; then
+          block force-push "force push with --mirror/--all/--branches is blocked: it targets every ref (including protected branches) with no verifiable single target. Name one branch: 'git push --force-with-lease origin <branch>'. Or SKIP_HOOKS=force-push SKIP_REASON='<why>'."
         else
-          block force-push "force push needs an explicit target branch: use 'git push --force-with-lease origin <branch>'. A bare or remote-only force-push is blocked because its real destination is config-dependent (push.default / upstream tracking) and can't be confirmed non-protected. Or SKIP_HOOKS=force-push SKIP_REASON='<why>'."
+          # Per force-bearing push SEGMENT, count positional (non-flag) tokens
+          # after `push`. An explicit <remote> <refspec> pair (>=2 positionals)
+          # names the target; with no protected token above it is verified
+          # non-protected. Block if ANY force-bearing segment lacks a named target
+          # (bare/remote-only) — its real destination is config-dependent
+          # (push.default / upstream tracking) and can't be confirmed non-protected.
+          fp_bare=
+          while IFS= read -r fp_seg; do
+            [ -n "$fp_seg" ] || continue
+            fp_positionals=0
+            fp_seen_push=
+            fp_skip_next=
+            read -ra fp_arr <<< "$fp_seg"
+            for fp_tok in "${fp_arr[@]}"; do
+              if [ -z "$fp_seen_push" ]; then
+                [ "$fp_tok" = push ] && fp_seen_push=1
+                continue
+              fi
+              if [ -n "$fp_skip_next" ]; then fp_skip_next=; continue; fi
+              case "$fp_tok" in
+                -o|--push-option|--repo|--receive-pack|--exec) fp_skip_next=1 ;;
+                -*) ;;  # flag — not a positional
+                *) fp_positionals=$((fp_positionals + 1)) ;;
+              esac
+            done
+            [ "$fp_positionals" -ge 2 ] || fp_bare=1
+          done <<< "$fp_force_segs"
+          if [ -n "$fp_bare" ]; then
+            block force-push "force push needs an explicit target branch: use 'git push --force-with-lease origin <branch>'. A bare or remote-only force-push is blocked because its real destination is config-dependent (push.default / upstream tracking) and can't be confirmed non-protected. Or SKIP_HOOKS=force-push SKIP_REASON='<why>'."
+          else
+            # Every force-bearing push segment names an explicit non-protected
+            # target → the rebase-pull tail (§13). Allow.
+            mark_allow force-push
+            decided=1
+          fi
         fi
       fi
       [ -z "$decided" ] && pass_through_trace force-push "$cmd"
