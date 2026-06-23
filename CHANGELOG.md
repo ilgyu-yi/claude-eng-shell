@@ -4,6 +4,23 @@ All notable changes to this project are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version numbers follow [semver](https://semver.org/) 0.x (`MAJOR=0` throughout v0; see SPEC §3.5 and §18.4). The per-PR fragment contract for unreleased changes lives at [`changelog_unreleased/TEMPLATE.md`](changelog_unreleased/TEMPLATE.md); `/release X.Y.Z` consolidates the fragments into a new section here.
 
+## [0.4.0] — 2026-06-23
+
+### Added
+
+- `/recall <topic>` — episodic retrieval over the project's own decision record (closed issues / merged PRs / ADRs), returning pointers only (number + one-line title, never a body), bounded by `RECALL_LIMIT` (default 5 per substrate) and fail-open when `gh` is unavailable (#429).
+- `scripts/test/mutation.sh` — an enforcement-matcher mutation harness (new `mutation` CI job) that measures the smoke suite's kill-rate on the critical matchers (commit-format / secret / protected-branch), failing if a silently-weakened guard survives the suite (#430).
+- `/replan-check` — an in-loop checkpoint that compares the working diff against the Plan and re-invokes `planner` only on *structural* divergence (out-of-plan load-bearing files or an unreachable acceptance criterion), keeping the Plan a faithful task-scoped manifest. Advisory, not a gate; referenced post-sync by `/sync-pr` (#434).
+- High-asymmetry reviewer tier (SPEC §4.11) — for decisions where a wrong approve is irreversible (security-surface merge to the default branch, force-push, Directive completion, ADR-at-merge), `/ship` and `/complete-directive` replace the single reviewer with an N=3 independent majority vote (`is_high_asymmetry` in `helpers/blast_radius.sh`); blast-radius-gated so the common path stays single-reviewer, fail-open to single reviewer on a helper miss (#435).
+- `eng_commit <type> <issue> <subject> [body…]` (`helpers/eng_commit.sh`) — a slot-assembly helper for the commit subject: validates `<type>(#<issue>): <subject>` against the conventional-commit rules *before* committing and builds the message as a bash argv array, so multibyte/multi-paragraph bodies round-trip cleanly and the commit-format hook sees and accepts the subject. Offered (not forced) by `/work-on`; the hook stays the net (#438).
+
+### Fixed
+
+- `/release` now prescribes the scopeless `chore: release X.Y.Z` commit subject so the release commit passes the conventional-commit hook unmodified — the old `chore(release):` form was rejected by the `commit-format` matcher and not covered by the `SKIP_HOOKS=branch` escape (#418).
+- `scripts/test/smoke.sh` no longer prints a spurious `No such file or directory` stderr line on a clean run — the §357 live-sink snapshots now guard absent legacy paths with `[ -f ]` before the input redirect, leaving the assertion semantics unchanged (#419).
+- The force-push matcher is now segment-isolated (like the protected-push arm, #366): a force flag, protected token, or push target named in a *sibling* non-push segment (a force-bearing push composed with a PR-create on the default branch) or a heredoc body no longer false-trips the gate, and a bare force-push composed with a sibling is no longer wrongly allowed. Every genuine-block path (protected / bare / `--mirror` / case-fold / multi-segment) is preserved (#439).
+- The force-push / protected-branch matchers no longer false-trip on a git literal documented inside a commit *message* (`-m` / `--message` / `-F` value) — a new `strip_command_data` `message` mode elides the message-flag values before scanning, so the shell (and adopters) can document git patterns in a commit body. The elision is anchored to the message flag, so a genuine quoted push target and a real sibling push segment are preserved, and an unclosed message quote fails closed (#443).
+
 ## [0.3.0] — 2026-06-19
 
 ### Added
@@ -192,3 +209,5 @@ Inaugural tagged release. Covers `init` through `v0.1.0` as a single block (per 
 [0.2.0]: https://github.com/ilgyu-yi/claude-eng-shell/releases/tag/v0.2.0
 
 [0.3.0]: https://github.com/ilgyu-yi/claude-eng-shell/releases/tag/v0.3.0
+
+[0.4.0]: https://github.com/ilgyu-yi/claude-eng-shell/releases/tag/v0.4.0
