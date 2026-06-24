@@ -1114,7 +1114,7 @@ The bypass routes through `should_skip branch` and is recorded in `audit.jsonl` 
 2. **Permission check** — push permission required. Missing → advise and block.
 3. **Target SSOT check**:
    - `MISSION.md` present? Absent → strong warning + draft proposal from `.claude/templates/mission.md` (no auto-create).
-   - `SPEC.md` present? `SPEC.md` is **tiered-required** (§1.3): required once the project has an external contract (CLI, API, schema, protocol), optional for a project with no external surface yet. Absent on a project that has one → scaffold the slot from `.claude/templates/spec.md` (no auto-authoring of contract content — the MISSION boundary); the `check-toc.yml` gate skips clean when there is no `SPEC.md`.
+   - `SPEC.md` present? `SPEC.md` is **required for any project that carries code** (§1.3) — it is the behavioural SSOT, so requiredness keys on the presence of code, not on whether an external contract (CLI, API, schema, protocol) exists. Absent on a code-carrying project → scaffold the slot from `.claude/templates/spec.md` (no auto-authoring of contract content — the MISSION boundary).
    - Report `README.md`, `CLAUDE.md`, `docs/ARCHITECTURE.md` presence.
 4. **`.github/` check**:
    - `ISSUE_TEMPLATE/` absent → suggest shell template.
