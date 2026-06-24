@@ -10533,7 +10533,7 @@ SHIM
      && [ "$s118_bp_ok_rc" = 0 ] && [ "$s118_bp_fail_rc" = 0 ]; then
     ok "118e: branch-protect present→ok, absent/gh-api-error→fail, both exit 0 (#456)"
   else
-    ng "118e: branch-protect wrong (ok=$s118_bp_ok[rc=$s118_bp_ok_rc] fail=$s118_bp_fail[rc=$s118_bp_fail_rc]) (#456)"
+    ng "118e: branch-protect wrong (ok=${s118_bp_ok}[rc=$s118_bp_ok_rc] fail=${s118_bp_fail}[rc=$s118_bp_fail_rc]) (#456)"
   fi
 
   # 118f: .github/workflows present→ci ok; absent→ci fail.
