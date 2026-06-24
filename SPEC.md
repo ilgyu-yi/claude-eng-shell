@@ -784,6 +784,8 @@ Target repos are the shell's work — they fall outside this isolation rule (the
 
 ### 3.5 Entry point
 
+`scripts/setup.sh <local-path | repo-url>` is the single host-side orchestrator: it runs `scripts/bootstrap.sh` (deps check) → `scripts/register.sh` or `scripts/clone-into.sh` (the register/clone arg contract below) → `scripts/lib/onboard_checks.sh` (onboard pre-flight) → an optional dir-mode gate (`scripts/onboard_target.sh`, default N), then prints the next command (or, with `--enter`, execs `claude` directly). Reachable by relative path, so the `claude-eng` PATH export is optional — only needed to invoke `claude-eng` from an arbitrary directory.
+
 `claude-eng` is meant to start at the root of `workspace/<repo>/`. Subdirectories work too (walk-up), but starting at the root avoids edge cases in monorepos where subprojects may carry their own `.claude/`.
 
 **External path support**: a target repo can live outside the shell's `workspace/` (e.g. `~/code/<repo>`). `scripts/register.sh <abs-path>` (1) creates a `workspace/<basename>` symlink, (2) records the target's physical path (`pwd -P`) in the target's per-project `.claude/eng-state/registry.txt` via `eng_registry_file "$target"` (#316), (3) runs the inject logic of §3.2. The shell's `.gitignore` whitelists `workspace/*` so the shell git tree doesn't pick up target trees even in the external-path case. Direct clones into `workspace/` are also recorded in the registry — the guard is always registry-based.
