@@ -7171,6 +7171,124 @@ check_commit_subject "chore(release): 0.3.0" 2>/dev/null \
   && ng "65i: scoped chore(release) form unexpectedly accepted — guard premise broken (#416)" \
   || ok "65i: scoped chore(release) form correctly rejected by conventional_commit hook (#416)"
 
+# ---------- §65j: manifest-match preflight (#469) ----------
+# §65j exercises the verification-only manifest-match preflight Phase C adds to
+# release_consolidate.sh (between X.Y.Z semver resolution and the VERSION
+# write-back). The preflight resolves the detected stack's manifest version via
+# a new detect_version() in detect_stack.sh and:
+#   - confident MISMATCH (manifest ver != X.Y.Z) → non-zero exit, stderr names
+#     BOTH the manifest version and the release version.
+#   - MATCH (manifest ver == X.Y.Z) → preflight passes; release proceeds to the
+#     normal staged dry-run success (exit 0, today's happy-path outcome).
+#   - UNCERTAIN (unknown stack / absent manifest / unparseable field) → graceful
+#     skip with a note, NON-blocking (run proceeds exactly as today).
+#   - The preflight READS the manifest, never writes it.
+# The §65 fixtures drop no package.json, so detect_stack resolves `unknown` →
+# today's runs hit the uncertain/skip path. To force the node match/mismatch
+# arms, §65j seeds a package.json with a `.version` into the fixture via a
+# sibling seeder so detect_stack resolves `node`.
+# RED expectation pre-Phase-C: 65j-1 (mismatch refuse) and 65j-2 (match pass)
+# fail loud because no preflight exists yet; 65j-3 (non-block) and 65j-4
+# (never-writes grep-lock) hold even pre-Code (standing guards).
+
+# Sibling seeder: same shape as setup_release_smoke, plus a package.json with a
+# `.version` so detect_stack resolves `node` and the preflight has a manifest to
+# read. The package.json is committed into the init commit, so the working tree
+# stays clean (the helper's Step-2 clean-tree preflight passes).
+# usage: setup_release_smoke_node <dir> <version-content> <pkg-version> <cat> <num> <body>
+setup_release_smoke_node() {
+  local dir="$1" ver="$2" pkgver="$3" cat="${4:-}" num="${5:-}" body="${6:-}"
+  mkdir -p "$dir"
+  ( cd "$dir" && git init -q && \
+    git config user.email "smoke@example.com" && \
+    git config user.name "smoke" && \
+    git config commit.gpgsign false && \
+    git config tag.gpgsign false && \
+    printf '%s\n' "$ver" > VERSION && \
+    printf '{\n  "name": "smoke-fixture",\n  "version": "%s"\n}\n' "$pkgver" > package.json && \
+    printf '# Changelog\n\n## [0.1.0] — 2026-05-26\n\n### Added\n- prior release. (#1)\n\n[0.1.0]: https://example.test/releases/tag/v0.1.0\n' > CHANGELOG.md && \
+    for c in added changed deprecated removed fixed security; do
+      mkdir -p "changelog_unreleased/$c"
+      touch "changelog_unreleased/$c/.gitkeep"
+    done && \
+    if [ -n "$cat" ] && [ -n "$num" ]; then
+      printf '%s\n' "$body" > "changelog_unreleased/$cat/$num.md"
+    fi && \
+    git add -A && \
+    git commit -q -m init ) >/dev/null 2>&1
+}
+
+# §65j-1 — confident MISMATCH: node fixture with package.json version 0.1.0,
+# cutting 0.2.0 → preflight must refuse (non-zero) AND stderr names BOTH versions.
+s65j1_root=$(mktemp -d)
+s65j1_dir="$s65j1_root/repo"
+setup_release_smoke_node "$s65j1_dir" "0.2.0-dev" "0.1.0" "added" "469" "- preflight. (#469)"
+s65j1_rc=0
+s65j1_err=""
+if [ -x "$RELEASE_CONS" ]; then
+  s65j1_err=$( cd "$s65j1_dir" && "$RELEASE_CONS" 0.2.0 --dry-run 2>&1 >/dev/null )
+  s65j1_rc=$?
+fi
+s65j1_has_manifest=$(printf '%s' "$s65j1_err" | grep -c '0\.1\.0')
+s65j1_has_release=$(printf '%s' "$s65j1_err" | grep -c '0\.2\.0')
+if [ "$s65j1_rc" != "0" ] && [ "$s65j1_has_manifest" -ge 1 ] && [ "$s65j1_has_release" -ge 1 ]; then
+  ok "65j-1: manifest-match preflight refuses a confident mismatch (rc!=0) naming both manifest 0.1.0 + release 0.2.0 (#469)"
+else
+  ng "65j-1: manifest-mismatch refusal failed (rc=$s65j1_rc err-has-manifest=$s65j1_has_manifest err-has-release=$s65j1_has_release) (#469)"
+fi
+rm -rf "$s65j1_root"
+
+# §65j-2 — MATCH: node fixture with package.json version 0.2.0, cutting 0.2.0 →
+# preflight passes, release reaches today's normal staged dry-run success.
+s65j2_root=$(mktemp -d)
+s65j2_dir="$s65j2_root/repo"
+setup_release_smoke_node "$s65j2_dir" "0.2.0-dev" "0.2.0" "added" "469" "- preflight match. (#469)"
+s65j2_rc=1
+if [ -x "$RELEASE_CONS" ]; then
+  ( cd "$s65j2_dir" && "$RELEASE_CONS" 0.2.0 --dry-run >/dev/null 2>&1 )
+  s65j2_rc=$?
+fi
+s65j2_version=$(tr -d '[:space:]' < "$s65j2_dir/VERSION" 2>/dev/null)
+s65j2_section=$(grep -c '^## \[0\.2\.0\]' "$s65j2_dir/CHANGELOG.md" 2>/dev/null | tr -d ' ')
+if [ "$s65j2_rc" = "0" ] && [ "$s65j2_version" = "0.2.0" ] && [ "$s65j2_section" = "1" ]; then
+  ok "65j-2: manifest-match preflight passes a matching manifest; release reaches staged dry-run success (#469)"
+else
+  ng "65j-2: manifest-match pass-through failed (rc=$s65j2_rc version=$s65j2_version section=$s65j2_section) (#469)"
+fi
+rm -rf "$s65j2_root"
+
+# §65j-3 — UNCERTAIN: no package.json (detect_stack → unknown) → preflight must
+# gracefully skip and NOT block; run reaches today's happy-path success. This
+# likely holds pre-Code (no preflight yet) — it is the falsifiable non-block
+# guard that pins the uncertain arm so Phase C cannot make it blocking.
+s65j3_root=$(mktemp -d)
+s65j3_dir="$s65j3_root/repo"
+setup_release_smoke "$s65j3_dir" "0.2.0-dev" "added" "469" "- uncertain. (#469)"
+s65j3_rc=1
+if [ -x "$RELEASE_CONS" ]; then
+  ( cd "$s65j3_dir" && "$RELEASE_CONS" 0.2.0 --dry-run >/dev/null 2>&1 )
+  s65j3_rc=$?
+fi
+s65j3_version=$(tr -d '[:space:]' < "$s65j3_dir/VERSION" 2>/dev/null)
+if [ "$s65j3_rc" = "0" ] && [ "$s65j3_version" = "0.2.0" ]; then
+  ok "65j-3: uncertain stack (no manifest) → preflight skips, non-blocking; run reaches happy-path success (#469)"
+else
+  ng "65j-3: uncertain-arm non-block guard failed (rc=$s65j3_rc version=$s65j3_version) (#469)"
+fi
+rm -rf "$s65j3_root"
+
+# §65j-4 — never-writes grep-lock: the preflight READS the manifest, never writes
+# it. Assert release_consolidate.sh contains no redirect-into or jq-write of a
+# manifest file (package.json / Cargo.toml / pyproject.toml). Pre-Code this holds
+# trivially (no preflight); it is the standing guard against a Phase-C regression
+# that would mutate a manifest.
+s65j4_writes=$(grep -nE '(>>?[[:space:]]*("?)(package\.json|Cargo\.toml|pyproject\.toml))|jq[^|]*>[[:space:]]*("?)(package\.json|Cargo\.toml|pyproject\.toml)' "$RELEASE_CONS" 2>/dev/null)
+if [ -z "$s65j4_writes" ]; then
+  ok "65j-4: release_consolidate.sh never writes package.json/Cargo.toml/pyproject.toml (preflight is read-only) (#469)"
+else
+  ng "65j-4: release_consolidate.sh writes a manifest — preflight must be read-only:$s65j4_writes (#469)"
+fi
+
 # ---------- 66. check-changelog.yml workflow (#133 / Directive #128) ----------
 # §66 locks the per-PR fragment-gate workflow contract: file exists at the
 # shell repo AND at canonical-source path AND they are byte-identical AND

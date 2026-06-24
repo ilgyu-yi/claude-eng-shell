@@ -18,6 +18,7 @@ Consume the fragment-contract substrate (SPEC §18) and produce a release PR. Th
    - `git fetch --tags origin` to refresh tag view.
    - Refuse with `release/X.Y.Z branch already exists on origin` if the branch is present.
    - Refuse with `vX.Y.Z already released` (exit 0, no mutation) if the tag is present — idempotent retry per SPEC §18.4.
+   - **Manifest-match check** (verify, not write-back; SPEC §18.2 / §6.6, #469): resolve the detected stack's version field via `detect_version` and refuse (naming both versions + the bump fix) on a confident mismatch with `X.Y.Z`. An unknown stack / absent or unparseable field degrades to a graceful skip with a note. The manifest is read, never written.
 
 3. **Fragment scan + validate** (helper) —
    - Enumerate `changelog_unreleased/<category>/*.md` across the six Keep-a-Changelog categories.
