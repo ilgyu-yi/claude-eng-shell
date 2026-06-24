@@ -11191,6 +11191,121 @@ else
 fi
 rm -rf "$S123_PROBE"
 
+# ---------- §65k: post-merge Release verify (#471) ----------
+# §65k covers the #471 read-only, fail-open post-merge Release verify:
+#  (1) The documented `gh release create` one-liner (release.md §82 + SPEC §18
+#      §1422) must carry NO `--verify-tag` flag (#448): the tag and Release are
+#      made together from --target, so --verify-tag would always abort a fresh
+#      release. The docs ALSO carry explanatory prose ("No `--verify-tag` (#448):
+#      that flag aborts `gh release create` …") that embeds BOTH tokens in one
+#      line — so a naive `gh release create.*--verify-tag` grep false-positives on
+#      the prose. The grep-lock therefore anchors on the COMMAND form
+#      (`^[[:space:]]*gh release create`), which the prose lines (starting `**No`
+#      / `Re-running`) do not match. Mirrors the §65i premise-lock shape: a
+#      premise-lock proves the bad command form WOULD be caught if reintroduced.
+#  (2) scripts/release_verify.sh <X.Y.Z> (Phase C) is a read-only, fail-open
+#      post-merge verify: one `gh release view "vX.Y.Z" --json tagName,body`
+#      query, advisory-only, exits 0 on EVERY path. Four arms: tag+non-empty body
+#      → `ok` line; empty/whitespace body → "empty notes" advisory; gh "release
+#      not found" → "no Release found" advisory; any other gh failure → fail-open
+#      advisory. A PATH-overlay `gh` stub (mirrors §29/§118) keyed on argv drives
+#      each arm.
+# RED expectation pre-Phase-C: 65k-1 (grep-lock) PASSES now — the Doc commit
+# already removed the flag, so it is the standing regression guard. 65k-2..5 fail
+# LOUD via a script-absent guard (mirrors §107/§118) because release_verify.sh is
+# absent until Phase C.
+
+# §65k-1 — grep-lock: no `gh release create … --verify-tag` COMMAND in release.md
+# or SPEC.md, NOT tripped by the explanatory prose. Anchor on the command form.
+s65k_release="$SHELL_ROOT/.claude/commands/release.md"
+s65k_spec="$SHELL_ROOT/SPEC.md"
+# Command-form lines: optional leading whitespace then `gh release create`.
+s65k_bad=$(grep -hE '^[[:space:]]*gh release create' "$s65k_release" "$s65k_spec" 2>/dev/null \
+  | grep -c -- '--verify-tag')
+# Premise lock: a literal bad command line WOULD be caught by the same matcher.
+s65k_premise=$(printf 'gh release create v1.2.3 --verify-tag --target X\n' \
+  | grep -E '^[[:space:]]*gh release create' | grep -c -- '--verify-tag')
+if [ "$s65k_bad" = "0" ] && [ "$s65k_premise" -ge 1 ]; then
+  ok "65k-1: documented gh release create command carries no --verify-tag flag; premise-lock detects the bad form (#471)"
+else
+  ng "65k-1: grep-lock failed (bad-command-hits=$s65k_bad premise=$s65k_premise; want 0/≥1) (#471)"
+fi
+
+# §65k-2..5 — drive scripts/release_verify.sh under a PATH-overlay `gh` stub.
+S65K_SCRIPT="$SHELL_ROOT/scripts/release_verify.sh"
+if [ ! -f "$S65K_SCRIPT" ]; then
+  ng "65k-2: tag present + non-empty body → ok line, exit 0 — scripts/release_verify.sh missing (Phase C not landed) (#471)"
+  ng "65k-3: gh 'release not found' → no-Release advisory, exit 0 — script missing (#471)"
+  ng "65k-4: empty/whitespace body → empty-notes advisory, exit 0 — script missing (#471)"
+  ng "65k-5: generic gh failure → fail-open advisory, exit 0 — script missing (#471)"
+else
+  S65K_DIR=$(cd "$(mktemp -d)" && pwd -P)
+  S65K_SHIM="$S65K_DIR/bin"
+  S65K_STATE="$S65K_DIR/state"
+  mkdir -p "$S65K_SHIM" "$S65K_STATE"
+  # Smoke shim for release_verify.sh. State files under $S65K_STATE drive `gh
+  # release view`: mode=ok|empty|notfound|error selects the response.
+  cat > "$S65K_SHIM/gh" <<'SHIM'
+#!/bin/sh
+case "$*" in
+  *"release view"*)
+    mode=$(cat "$S65K_STATE/mode" 2>/dev/null)
+    case "$mode" in
+      ok)       printf '{"tagName":"v0.2.0","body":"notes here"}\n' ;;
+      empty)    printf '{"tagName":"v0.2.0","body":""}\n' ;;
+      notfound) echo 'release not found' >&2; exit 1 ;;
+      *)        echo 'HTTP 500: something broke' >&2; exit 1 ;;
+    esac
+    ;;
+esac
+exit 0
+SHIM
+  chmod +x "$S65K_SHIM/gh"
+
+  # s65k_run <mode> → echoes the script's stdout+stderr (advisories may go either);
+  # sets s65k_rc to its exit code. gh resolves via PATH (shim first).
+  s65k_run() {
+    printf '%s\n' "$1" > "$S65K_STATE/mode"
+    s65k_out=$(
+      PATH="$S65K_SHIM:$PATH" S65K_STATE="$S65K_STATE" \
+        bash "$S65K_SCRIPT" 0.2.0 2>&1
+    ); s65k_rc=$?
+  }
+
+  # 65k-2: tag present + non-empty body → exit 0 AND an `ok` marker in output.
+  s65k_run ok
+  if [ "$s65k_rc" = "0" ] && printf '%s\n' "$s65k_out" | grep -qi 'ok'; then
+    ok "65k-2: present tag + non-empty body → ok marker, exit 0 (#471)"
+  else
+    ng "65k-2: verify-ok arm failed (rc=$s65k_rc out='$s65k_out'; want exit 0 + ok marker) (#471)"
+  fi
+
+  # 65k-3: gh 'release not found' → exit 0 AND an advisory naming the missing Release.
+  s65k_run notfound
+  if [ "$s65k_rc" = "0" ] && printf '%s\n' "$s65k_out" | grep -qi 'release'; then
+    ok "65k-3: gh 'release not found' → no-Release advisory, exit 0 (#471)"
+  else
+    ng "65k-3: no-Release arm failed (rc=$s65k_rc out='$s65k_out'; want exit 0 + Release advisory) (#471)"
+  fi
+
+  # 65k-4: empty body → exit 0 AND an advisory naming empty notes.
+  s65k_run empty
+  if [ "$s65k_rc" = "0" ] && printf '%s\n' "$s65k_out" | grep -qi 'empty\|notes'; then
+    ok "65k-4: empty/whitespace body → empty-notes advisory, exit 0 (#471)"
+  else
+    ng "65k-4: empty-notes arm failed (rc=$s65k_rc out='$s65k_out'; want exit 0 + empty-notes advisory) (#471)"
+  fi
+
+  # 65k-5: generic gh failure → exit 0 + a fail-open advisory (never blocks).
+  s65k_run error
+  if [ "$s65k_rc" = "0" ] && printf '%s\n' "$s65k_out" | grep -qiE 'advisor|unable|could not|fail|warn|skip'; then
+    ok "65k-5: generic gh failure → fail-open advisory, exit 0 (#471)"
+  else
+    ng "65k-5: fail-open arm failed (rc=$s65k_rc out='$s65k_out'; want exit 0 + fail-open advisory) (#471)"
+  fi
+  rm -rf "$S65K_DIR"
+fi
+
 # ---------- §110: README assertion-count floor (#409) ----------
 # README's "Verify" block advertises an assertion count as "<N>+". A count that
 # OVERSTATES coverage (claims more than the suite runs) is the misleading
