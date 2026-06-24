@@ -66,7 +66,7 @@ Consume the fragment-contract substrate (SPEC §18) and produce a release PR. Th
     Release PR opened: <pr-url>
     VERSION: <X.Y.Z>
     Fragments consolidated: <N>
-    Post-merge: run `gh release create v<X.Y.Z> --target <merge-sha> --notes-file <(awk '/^## \[<X.Y.Z>\]/{f=1;next} /^## \[/{f=0} f' CHANGELOG.md) --verify-tag` after the PR merges.
+    Post-merge: run `gh release create v<X.Y.Z> --target <merge-sha> --notes-file <(awk '/^## \[<X.Y.Z>\]/{f=1;next} /^## \[/{f=0} f' CHANGELOG.md)` then `scripts/release_verify.sh <X.Y.Z>` after the PR merges.
     ```
 
 ## Post-merge tag + GitHub Release
@@ -79,8 +79,13 @@ git checkout <base>
 git pull --ff-only
 MERGE_SHA=$(git rev-parse HEAD)
 awk '/^## \[<X.Y.Z>\]/{f=1; next} /^## \[/{f=0} f' CHANGELOG.md > /tmp/release-notes-v<X.Y.Z>.md
-gh release create v<X.Y.Z> --title v<X.Y.Z> --target "$MERGE_SHA" --notes-file /tmp/release-notes-v<X.Y.Z>.md --verify-tag
+gh release create v<X.Y.Z> --title v<X.Y.Z> --target "$MERGE_SHA" --notes-file /tmp/release-notes-v<X.Y.Z>.md
+"$CLAUDE_ENG_SHELL_ROOT/scripts/release_verify.sh" <X.Y.Z>   # confirms the tag + Release-with-notes landed
 ```
+
+**No `--verify-tag`** (#448): that flag *aborts* `gh release create` unless the tag already exists, but the tag and Release are created **together** here (the tag is made from `--target`), so `--verify-tag` would always abort on a fresh release. Omitting it lets `gh release create` make both.
+
+**Post-merge verify** (#471, SPEC §18.2): `scripts/release_verify.sh <X.Y.Z>` is a **read-only, fail-open** confirmation run *after* the create — it checks the `vX.Y.Z` tag exists and a GitHub Release with **non-empty notes** is present, printing an advisory line on a missing tag / missing or empty-notes Release. It never creates anything and exits 0 on every path (gh error / offline → a single advisory line), so it observes the result without blocking the flow. The `/ship` `unattended` post-merge continuation runs it after its `gh release create`.
 
 This is intentionally manual per Directive #128 non-goal ("No automated distribution") — the one-liner stays visible and auditable rather than buried in a workflow. Adopters who want full automation can wrap this in a `release-tag.yml` workflow downstream without changing the skill.
 
