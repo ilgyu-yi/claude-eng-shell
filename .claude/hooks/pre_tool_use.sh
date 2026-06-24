@@ -124,6 +124,17 @@ case "$tool" in
     # "Implementation note" for the framing.
     cmd=$(printf '%s' "$cmd" | tr '\n' ' ' | sed -E 's/\\[[:space:]]+/ /g; s/[[:space:]]+/ /g')
 
+    # Re-separate a glued unquoted command separator (`&&`/`||`/`;`/`|`) into a
+    # space-padded boundary, BEFORE parse_env_prefix's shlex round-trip below
+    # (#446). A separator glued to an adjacent token — `commit -m "x"&&git push`
+    # — would otherwise fold into one shlex token (`'x&&git'`), destroying the
+    # following `git push` verb every downstream arm's entry-grep keys on → a
+    # false-negative on the irreversible force-push/protected gate (SPEC §6.0
+    # P1). Quote-aware: an operator INSIDE a quoted `-m`/`--message` value is
+    # data (composes with the #440 elision) and is never re-separated — so no
+    # boundary is invented. See git_matcher.sh::space_glued_separators.
+    space_glued_separators "$cmd" cmd
+
     # Parse the SPEC §7 escape-hatch env-prefix (SKIP_HOOKS=, SKIP_REASON=,
     # etc.) out of the cmd string, export it into this shell, and strip the
     # prefix tokens before downstream matchers run. Claude Code's hook

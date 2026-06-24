@@ -195,6 +195,74 @@ sys.exit(0)
   fi
 }
 
+# space_glued_separators <cmd> <outvar> — re-separate a GLUED unquoted command
+# separator (`&&`/`||`/`;`/`|`) into a space-padded boundary, so it survives the
+# `parse_env_prefix` shlex round-trip as its own token (#446). A separator glued
+# to an adjacent token — `git commit -m "x"&&git push --force origin main` (no
+# space) — otherwise folds into a single shlex token (`'x&&git'`), DESTROYING the
+# following `git push` verb that every downstream arm's entry-grep keys on → a
+# false-negative on the irreversible force-push/protected gate (SPEC §6.0 P1).
+#
+# QUOTE-AWARE (the central correctness invariant): only separators OUTSIDE quoted
+# string values are padded. A `&&`/`;`/`|` INSIDE a quoted `-m`/`--message` value
+# is data, not a boundary, and is never re-separated — so we never INVENT a
+# boundary the user's command lacked (composes with the #440 message-value
+# elision; no over-block). The separator set mirrors push_segments' awk regex.
+#
+# Idempotent: an already-spaced separator is normalized to single spaces, not
+# doubled. python3-absent → pass-through no-op: on that path parse_env_prefix
+# does NOT fold (it passes $cmd through unchanged), so the glued verb stays
+# intact for the entry-grep and there is nothing to repair.
+space_glued_separators() {
+  local _sgs_cmd="$1" _sgs_outvar="$2" _sgs_out
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf -v "$_sgs_outvar" '%s' "$_sgs_cmd"
+    return
+  fi
+  if _sgs_out=$(printf '%s' "$_sgs_cmd" | python3 -c '
+import sys
+s = sys.stdin.read()
+out = []
+i, n = 0, len(s)
+in_s = in_d = False
+def pad(tok):
+    while out and out[-1] == " ":
+        out.pop()
+    out.append(" "); out.append(tok); out.append(" ")
+while i < n:
+    c = s[i]
+    if in_s:
+        out.append(c)
+        if c == "\x27": in_s = False
+        i += 1; continue
+    if in_d:
+        out.append(c)
+        if c == "\\" and i + 1 < n:
+            out.append(s[i+1]); i += 2; continue
+        if c == "\"": in_d = False
+        i += 1; continue
+    if c == "\x27":
+        in_s = True; out.append(c); i += 1; continue
+    if c == "\"":
+        in_d = True; out.append(c); i += 1; continue
+    two = s[i:i+2]
+    if two in ("&&", "||"):
+        pad(two); i += 2
+        while i < n and s[i] == " ": i += 1
+        continue
+    if c in (";", "|"):
+        pad(c); i += 1
+        while i < n and s[i] == " ": i += 1
+        continue
+    out.append(c); i += 1
+sys.stdout.write("".join(out).strip())
+' 2>/dev/null); then
+    printf -v "$_sgs_outvar" '%s' "$_sgs_out"
+  else
+    printf -v "$_sgs_outvar" '%s' "$_sgs_cmd"   # fail-open: parse error → unchanged
+  fi
+}
+
 # push_segments <cmd> — split <cmd> on unquoted command separators
 # (&& || ; | and newline) and print each segment containing a `git push` token,
 # one per line (#366). The protected-push arm greps the protected-token pattern
