@@ -7941,6 +7941,116 @@ else
   ng "70s: a genuine sibling force-push to protected must still block (#440)"
 fi
 
+# §70t–§70v: glued-separator folds the force-push verb (#446). When a shell
+# operator (&&, ;, |) is GLUED to the prior token with no surrounding space
+# (e.g. `git commit -m "x"&&git push…`), parse_env_prefix's shlex round-trip
+# folds the operator into one token, destroying the `git push` verb the push
+# arms' entry-grep keys on → the protected force-push slips through ALLOWED.
+# The spaced sibling form is correctly BLOCKED today. The Code phase adds a
+# normalization that re-separates the glued operator, flipping the glued forms
+# to BLOCKED while leaving every legit allow-case untouched.
+#
+# RED-PENDING-CODE (currently ALLOWED, must flip to BLOCKED):
+#   §70t glued &&, and §70u glued &&, ;, | protected force-push vectors.
+# GREEN now AND after: every spaced control, the newline-glued case (the \n is
+#   collapsed to a space before parse_env_prefix), all §70v allow-cases.
+
+# NOTE on the prior segment's subject: every glued command pairs the protected
+# force-push onto a VALID conventional-commit subject (`feat(#5): real subject`),
+# exactly as §70p–§70s do. A throwaway subject like `-m "x"` would be blocked by
+# the independent commit-format arm, confounding the force-push decision under
+# test; a valid subject isolates the force-push/protected arm as the sole gate.
+
+# §70t (AC1): a glued-&& force-push to a protected branch must BLOCK. The
+# `subject"&&` fold currently swallows the `git push` verb → ALLOWED → RED until
+# the Code fix.
+if [ "$(hook_run 'git commit -m "feat(#5): real subject"&&git push --force origin main')" = "2" ]; then
+  ok "70t: glued-&& force-push to protected branch blocked (#446)"
+else
+  ng "70t: glued-&& force-push to protected branch must block (#446)"
+fi
+# §70t control: the spaced sibling is BLOCKED today AND after the fix — proves
+# the assertion harness itself catches the protected force-push when not folded.
+if [ "$(hook_run 'git commit -m "feat(#5): real subject" && git push --force origin main')" = "2" ]; then
+  ok "70t: spaced-&& control force-push to protected branch blocked (#446)"
+else
+  ng "70t: spaced-&& control must block (harness sanity) (#446)"
+fi
+
+# §70u (AC2): glued ≡ spaced equivalence across three separators, each gluing a
+# protected force-push onto a prior valid `git commit`. Each glued form must
+# BLOCK identically to its spaced sibling.
+# §70u-and glued && — RED until the Code fix.
+if [ "$(hook_run 'git commit -m "feat(#5): real subject"&&git push --force origin main')" = "2" ]; then
+  ok "70u: glued-&& protected force-push blocked (#446)"
+else
+  ng "70u: glued-&& protected force-push must block (#446)"
+fi
+# §70u-and spaced && control — BLOCKED now and after.
+if [ "$(hook_run 'git commit -m "feat(#5): real subject" && git push --force origin main')" = "2" ]; then
+  ok "70u: spaced-&& protected force-push control blocked (#446)"
+else
+  ng "70u: spaced-&& protected force-push control must block (#446)"
+fi
+# §70u-semi glued ; — RED until the Code fix.
+if [ "$(hook_run 'git commit -m "feat(#5): real subject";git push --force origin main')" = "2" ]; then
+  ok "70u: glued-; protected force-push blocked (#446)"
+else
+  ng "70u: glued-; protected force-push must block (#446)"
+fi
+# §70u-semi spaced ; control — BLOCKED now and after.
+if [ "$(hook_run 'git commit -m "feat(#5): real subject" ; git push --force origin main')" = "2" ]; then
+  ok "70u: spaced-; protected force-push control blocked (#446)"
+else
+  ng "70u: spaced-; protected force-push control must block (#446)"
+fi
+# §70u-pipe glued | — RED until the Code fix. (Confirmed a genuine vector: folds
+# the operator into the prior token, destroying the push verb — plan-review OK.)
+if [ "$(hook_run 'git commit -m "feat(#5): real subject"|git push --force origin main')" = "2" ]; then
+  ok "70u: glued-| protected force-push blocked (#446)"
+else
+  ng "70u: glued-| protected force-push must block (#446)"
+fi
+# §70u-pipe spaced | control — BLOCKED now and after.
+if [ "$(hook_run 'git commit -m "feat(#5): real subject" | git push --force origin main')" = "2" ]; then
+  ok "70u: spaced-| protected force-push control blocked (#446)"
+else
+  ng "70u: spaced-| protected force-push control must block (#446)"
+fi
+# §70u-newline exploratory: a newline separator. pre_tool_use.sh:125 collapses
+# \n→space BEFORE parse_env_prefix, so the newline normalizes to a spaced
+# boundary and is expected ALREADY BLOCKED (now AND after). If this comes up RED
+# the \n-collapse assumption is wrong — flag it.
+nl_glued_cmd=$(printf 'git commit -m "feat(#5): real subject"\ngit push --force origin main')
+if [ "$(hook_run "$nl_glued_cmd")" = "2" ]; then
+  ok "70u: newline-glued protected force-push blocked (\\n collapses to space) (#446)"
+else
+  ng "70u: newline-glued protected force-push must block (\\n-collapse vector) (#446)"
+fi
+
+# §70v (AC3): no over-block — every allow-case must stay ALLOWED now AND after
+# the normalization. These guard that re-separating the glued operator does not
+# leak into legitimate compounds or commit-message data.
+# §70v-i: glued legit force-push to a NON-protected branch → ALLOWED.
+if [ "$(hook_run 'git commit -m "feat(#5): real subject"&&git push --force origin feature-branch')" = "0" ]; then
+  ok "70v: glued-&& force-push to NON-protected branch allowed (#446)"
+else
+  ng "70v: legit glued force-push to a non-protected branch must not block (#446)"
+fi
+# §70v-ii: ordinary glued non-push compound → ALLOWED.
+if [ "$(hook_run 'git status&&echo done')" = "0" ]; then
+  ok "70v: ordinary glued non-push compound allowed (#446)"
+else
+  ng "70v: a glued non-push compound must not block (#446)"
+fi
+# §70v-iii: a --force/main literal INSIDE a quoted -m value → ALLOWED (message
+# data, composes with the #440 elision; the over-block guard the fix must keep).
+if [ "$(hook_run 'git commit -m "feat(#5): note re git push --force origin main here"')" = "0" ]; then
+  ok "70v: force/protected literal inside an -m message value allowed (#446)"
+else
+  ng "70v: a force/protected literal in -m message data must not trip the gate (#446)"
+fi
+
 # ---------- 71. escape-hatch reference docs route in-harness blocks correctly (#217) ----------
 # SPEC §7 has TWO escape forms; the leading env-prefix is non-functional in the
 # live Claude Code Bash tool (consumed as subprocess env, #206), so the canonical
