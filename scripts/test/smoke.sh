@@ -8051,6 +8051,115 @@ else
   ng "70v: a force/protected literal in -m message data must not trip the gate (#446)"
 fi
 
+# §70w: single-& (bash background operator) glued-separator fold (#476) — the
+# sibling of #446. A lone unquoted `&` glued to the prior token (no surrounding
+# space, e.g. `git status&git push…`) folds into one token under the shlex
+# round-trip the same way &&/;/| do, destroying the `git push` verb the push
+# arms key on → the protected force-push slips through ALLOWED. The Code phase
+# (1) pads a lone unquoted `&` to ` & ` in space_glued_separators UNLESS it is
+# part of a redirect (immediately adjacent to `>`/`<`: `>&`, `&>`, `N>&M`, `<&`,
+# `&>>`), and (2) adds `&` to push_segments' awk split set so a glued `&`
+# isolates sibling clauses. `&&` is matched first, so the lone-`&` arm must not
+# mis-split it into `& &`.
+#
+# Every glued command pairs onto a VALID conventional-commit subject
+# (`feat(#5): real subject`) per §70p–§70v, so the commit-format matcher does
+# not confound the force-push decision under test.
+#
+# RED-PENDING-CODE (must flip with the Code fix):
+#   §70w-block          ALLOWED→BLOCKED (the `&` fold destroys the push verb).
+#   §70w-overblock-guard BLOCKED→ALLOWED (the sibling `echo main`'s `main`
+#                        currently false-trips the protected grep; the `&` split
+#                        must isolate the push segment).
+# GREEN now AND after: the spaced control, every redirect-allow arm, the
+#   redirect-protected arm, the in-message arm, and the &&-first regression arm.
+
+# §70w-block (AC1): a glued-& force-push to a protected branch must BLOCK. The
+# `status&git` fold currently swallows the `git push` verb → ALLOWED → RED.
+if [ "$(hook_run 'git status&git push --force origin main')" = "2" ]; then
+  ok "70w: glued-& force-push to protected branch blocked (#476)"
+else
+  ng "70w: glued-& force-push to protected branch must block (#476)"
+fi
+
+# §70w-overblock-guard (plan-review #1): a legit force-push to a NON-protected
+# branch backgrounded with `&`, followed by `echo main`. The `&` must isolate
+# the push segment so the sibling's `main` token does not trip the protected
+# grep → ALLOWED. Pre-Code push_segments has no `&` split, so the whole line is
+# one segment and `main` false-BLOCKs → RED.
+if [ "$(hook_run 'git push --force origin feature & echo main')" = "0" ]; then
+  ok "70w: backgrounded non-protected force-push + sibling 'main' allowed (#476)"
+else
+  ng "70w: a sibling 'echo main' after a backgrounded non-protected push must not block (#476)"
+fi
+
+# §70w-control: the spaced sibling is BLOCKED today AND after — glued≡spaced
+# equivalence, and proves the harness catches the protected force-push unfolded.
+if [ "$(hook_run 'git status & git push --force origin main')" = "2" ]; then
+  ok "70w: spaced-& control force-push to protected branch blocked (#476)"
+else
+  ng "70w: spaced-& control must block (harness sanity) (#476)"
+fi
+
+# §70w-redirect-allow: a force-push to a NON-protected branch carrying a
+# `&`-redirect must stay ALLOWED — the redirect carve-out must not pad `2>&1`
+# etc. into a clause boundary nor over-block. One assertion per redirect form.
+if [ "$(hook_run 'git push --force origin feature 2>&1')" = "0" ]; then
+  ok "70w-redirect-allow: 2>&1 stderr-to-stdout dup allowed (#476)"
+else
+  ng "70w-redirect-allow: a 2>&1 redirect on a non-protected force-push must not block (#476)"
+fi
+if [ "$(hook_run 'git push --force origin feature >&2')" = "0" ]; then
+  ok "70w-redirect-allow: >&2 stdout-to-stderr dup allowed (#476)"
+else
+  ng "70w-redirect-allow: a >&2 redirect on a non-protected force-push must not block (#476)"
+fi
+if [ "$(hook_run 'git push --force origin feature &>log')" = "0" ]; then
+  ok "70w-redirect-allow: &>log all-to-file redirect allowed (#476)"
+else
+  ng "70w-redirect-allow: a &>log redirect on a non-protected force-push must not block (#476)"
+fi
+if [ "$(hook_run 'git push --force origin feature 1>&2')" = "0" ]; then
+  ok "70w-redirect-allow: 1>&2 fd-numbered dup allowed (#476)"
+else
+  ng "70w-redirect-allow: a 1>&2 redirect on a non-protected force-push must not block (#476)"
+fi
+if [ "$(hook_run 'git push --force origin feature &>>log')" = "0" ]; then
+  ok "70w-redirect-allow: &>>log all-append redirect allowed (#476)"
+else
+  ng "70w-redirect-allow: a &>>log redirect on a non-protected force-push must not block (#476)"
+fi
+if [ "$(hook_run 'git push --force origin feature 0<&3')" = "0" ]; then
+  ok "70w-redirect-allow: 0<&3 input fd-dup (<&) allowed (#476)"
+else
+  ng "70w-redirect-allow: a 0<&3 input fd-dup on a non-protected force-push must not block (#476)"
+fi
+
+# §70w-redirect-protected: the redirect carve-out must NOT blind the gate to a
+# redirect-bearing protected force-push → BLOCKED (now AND after).
+if [ "$(hook_run 'git push --force origin main 2>&1')" = "2" ]; then
+  ok "70w-redirect-protected: redirect-bearing protected force-push blocked (#476)"
+else
+  ng "70w-redirect-protected: a 2>&1 redirect must not blind the gate to a protected force-push (#476)"
+fi
+
+# §70w-in-message: the `&` and the push text live inside a quoted -m value =
+# data, not a boundary → ALLOWED (now AND after; composes with the #440 elision).
+if [ "$(hook_run 'git commit -m "feat(#5): mention & and git push --force origin main here"')" = "0" ]; then
+  ok "70w-in-message: a lone & + push literal inside an -m value allowed (#476)"
+else
+  ng "70w-in-message: a & and push literal in -m message data must not trip the gate (#476)"
+fi
+
+# §70w-amp-amp-first: regression guard — the new lone-& arm must match two-char
+# `&&` FIRST and not mis-split it into `& &`. A glued-&& protected force-push
+# must still BLOCK (now AND after).
+if [ "$(hook_run 'git commit -m "feat(#5): real subject"&&git push --force origin main')" = "2" ]; then
+  ok "70w-amp-amp-first: glued-&& protected force-push still blocked (no & & mis-split) (#476)"
+else
+  ng "70w-amp-amp-first: && must match before lone-& (no & & mis-split) (#476)"
+fi
+
 # ---------- 71. escape-hatch reference docs route in-harness blocks correctly (#217) ----------
 # SPEC §7 has TWO escape forms; the leading env-prefix is non-functional in the
 # live Claude Code Bash tool (consumed as subprocess env, #206), so the canonical
