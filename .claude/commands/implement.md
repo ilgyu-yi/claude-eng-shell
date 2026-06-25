@@ -1,5 +1,5 @@
 ---
-description: OPT-IN Phase-C author. Assemble an explicit manifest (the Plan + the failing Phase-B test + how to run it + the named relevant files), spawn the implementer subagent on it, and absorb ONLY its structured return (commit/diff + plan-deviations + discoveries). Nothing auto-routes the Code phase here — invoked explicitly, pending Directive #477 signal-4. See SPEC §5.28.
+description: OPT-IN Phase-C author. Assemble an explicit manifest (the Plan + the failing Phase-B test + how to run it + the named relevant files + the directive-level learnings), spawn the implementer subagent on it, and absorb ONLY its structured return (commit/diff + plan-deviations + discoveries). Nothing auto-routes the Code phase here — invoked explicitly, pending Directive #477 signal-4. See SPEC §5.28.
 ---
 
 `/implement <issue#>` runs the Code phase (Phase C) in a write-capable `implementer` subagent (§4.12) instead of the main loop, so the within-Execution authoring churn stays out of the main assistant's context. See SPEC §5.28.
@@ -11,9 +11,10 @@ The **default Code-phase flow is unchanged**: the main assistant authors the imp
 Before spawning, gather the explicit manifest — the subagent has **no access to this conversation**, so everything it needs must be in the manifest:
 - the **Plan** — from the PR body's `## Plan` / `## Checklist` (the planner output, §4.1);
 - the **failing Phase-B test** — the test file(s) the test-writer authored, **and how to run it** (the exact command);
-- the **named relevant file paths** — the files the implementation will touch (the PR body's `## Key context` is the source).
+- the **named relevant file paths** — the files the implementation will touch (the PR body's `## Key context` is the source);
+- the **directive-level learnings** — the distilled `### Learnings for the next Execution` blocks `/work-on` reads back from the parent Directive's `/reflect` comments (§5.15) and injects (closes #477 signal 3). **Advisory context only** — codebase gotchas / conventions / what-to-reuse-or-avoid carried over from sibling Executions; it never gates the implementation. Absent when the Issue has no parent Directive or no enriched reflections yet.
 
-If the Plan or the failing test is missing, the manifest is incomplete — finish Phase A/B first; do not spawn against a partial manifest.
+If the Plan or the failing test is missing, the manifest is incomplete — finish Phase A/B first; do not spawn against a partial manifest. The `directive-level learnings` field is optional — its absence does not make the manifest incomplete.
 
 ## Spawn
 Invoke `subagent_type: implementer` with the assembled manifest. It iterates (reads, tries approaches, runs the test + adjacent regression + lint/smoke) entirely in its own ephemeral context.
