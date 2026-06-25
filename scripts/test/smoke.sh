@@ -12150,6 +12150,85 @@ else
   fi
 fi
 
+# ---------- §127: directive-level coding-memory loop contract (#488 / Directive #477) ----------
+# Placed before §110 (the README floor guard, which runs last by design). Phase B
+# (Test) for EI-2 under Directive #477. The Doc phase already landed the contract
+# into .claude/commands/{reflect,work-on,implement}.md + SPEC §5.15/§5.3/§4.12, so
+# these are REGRESSION LOCKS (style of §126a/b), not RED-first. NON-VACUOUS: each
+# arm fails LOUD when its scanned file is missing rather than greening on nothing
+# scanned. §127b keys on NON-colliding tokens (directive-level learnings / Parent
+# Directive / manifest) so it never reintroduces the §126c landmine substrings.
+
+# §127a — /reflect learnings-distill section. reflect.md must document the
+# `### Learnings for the next Execution` section, the distillation heuristic
+# (durable learning kept, churn NOT distilled), and that the implementer's
+# structured-return discoveries are a source.
+S127_REFLECT="$SHELL_ROOT/.claude/commands/reflect.md"
+if [ ! -f "$S127_REFLECT" ]; then
+  ng "127a: .claude/commands/reflect.md missing — learnings-distill contract absent (#488)"
+else
+  s127a_section=$(grep -ciE 'Learnings for the next Execution' "$S127_REFLECT" 2>/dev/null | tr -d ' ')
+  s127a_durable=$(grep -ciE 'durable learning|outlives this PR' "$S127_REFLECT" 2>/dev/null | tr -d ' ')
+  s127a_churn=$(grep -ciE 'Churn is NOT a learning|within-Execution churn|not be transcribed' "$S127_REFLECT" 2>/dev/null | tr -d ' ')
+  s127a_disc=$(grep -ciE 'structured-return .{0,12}discoveries|discoveries' "$S127_REFLECT" 2>/dev/null | tr -d ' ')
+  if [ "$s127a_section" -ge 1 ] && [ "$s127a_durable" -ge 1 ] && [ "$s127a_churn" -ge 1 ] && [ "$s127a_disc" -ge 1 ]; then
+    ok "127a: /reflect documents Learnings-for-next-Execution section + durable/churn distillation heuristic + discoveries source (#488)"
+  else
+    ng "127a: /reflect missing a learnings-distill token (section=$s127a_section durable=$s127a_durable churn=$s127a_churn disc=$s127a_disc) (#488)"
+  fi
+fi
+
+# §127b — /work-on read-back. work-on.md must document reading accumulated learnings
+# from the Parent Directive and injecting them into the planner + the /implement
+# manifest's `directive-level learnings` field. CRITICAL: keys on NON-colliding
+# tokens (directive-level learnings / Parent Directive / manifest) — must NOT grep
+# for the §126c landmine substrings (the implementer-dispatch phrasings §126c
+# greps work-on.md for), and reintroduces none of them in this file either.
+S127_WORKON="$SHELL_ROOT/.claude/commands/work-on.md"
+if [ ! -f "$S127_WORKON" ]; then
+  ng "127b: .claude/commands/work-on.md missing — read-back contract absent (#488)"
+else
+  s127b_learnings=$(grep -ciE 'directive-level learnings' "$S127_WORKON" 2>/dev/null | tr -d ' ')
+  s127b_readback=$(grep -ciE 'Parent Directive' "$S127_WORKON" 2>/dev/null | tr -d ' ')
+  s127b_planner=$(grep -ciE 'planner' "$S127_WORKON" 2>/dev/null | tr -d ' ')
+  s127b_manifest=$(grep -ciE 'manifest' "$S127_WORKON" 2>/dev/null | tr -d ' ')
+  if [ "$s127b_learnings" -ge 1 ] && [ "$s127b_readback" -ge 1 ] && [ "$s127b_planner" -ge 1 ] && [ "$s127b_manifest" -ge 1 ]; then
+    ok "127b: /work-on documents reading directive-level learnings from the Parent Directive + injecting into planner + the manifest field (#488)"
+  else
+    ng "127b: /work-on missing a read-back token (learnings=$s127b_learnings readback=$s127b_readback planner=$s127b_planner manifest=$s127b_manifest) (#488)"
+  fi
+fi
+
+# §127c — /implement manifest field. implement.md must document the
+# `directive-level learnings` field in the manifest contract.
+S127_IMPL="$SHELL_ROOT/.claude/commands/implement.md"
+if [ ! -f "$S127_IMPL" ]; then
+  ng "127c: .claude/commands/implement.md missing — manifest-field contract absent (#488)"
+else
+  s127c_field=$(grep -ciE 'directive-level learnings' "$S127_IMPL" 2>/dev/null | tr -d ' ')
+  s127c_manifest=$(grep -ciE 'manifest' "$S127_IMPL" 2>/dev/null | tr -d ' ')
+  if [ "$s127c_field" -ge 1 ] && [ "$s127c_manifest" -ge 1 ]; then
+    ok "127c: /implement documents the directive-level learnings field in the manifest contract (#488)"
+  else
+    ng "127c: /implement missing manifest-field token (field=$s127c_field manifest=$s127c_manifest) (#488)"
+  fi
+fi
+
+# §127d — no-regression. The existing /reflect reflection sections must still be
+# present in reflect.md (the Learnings section is additive, a fourth body section).
+if [ ! -f "$S127_REFLECT" ]; then
+  ng "127d: .claude/commands/reflect.md missing — cannot assert reflection-section no-regression (#488)"
+else
+  s127d_contrib=$(grep -ciE '### Contribution' "$S127_REFLECT" 2>/dev/null | tr -d ' ')
+  s127d_signals=$(grep -ciE 'Success signals advanced' "$S127_REFLECT" 2>/dev/null | tr -d ' ')
+  s127d_next=$(grep -ciE '### Next' "$S127_REFLECT" 2>/dev/null | tr -d ' ')
+  if [ "$s127d_contrib" -ge 1 ] && [ "$s127d_signals" -ge 1 ] && [ "$s127d_next" -ge 1 ]; then
+    ok "127d: /reflect existing reflection sections (Contribution / Success signals advanced / Next) intact after additive Learnings section (#488)"
+  else
+    ng "127d: /reflect lost an existing reflection section (contrib=$s127d_contrib signals=$s127d_signals next=$s127d_next) (#488)"
+  fi
+fi
+
 # ---------- §110: README assertion-count floor (#409) ----------
 # README's "Verify" block advertises an assertion count as "<N>+". A count that
 # OVERSTATES coverage (claims more than the suite runs) is the misleading

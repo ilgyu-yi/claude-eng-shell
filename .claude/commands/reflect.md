@@ -34,8 +34,16 @@ Post a structured reflection comment on a PR's parent Directive summarizing what
 
    ### Next
    <One sentence on what's still open toward this Directive's signals.>
+
+   ### Learnings for the next Execution
+   - **<gotcha / convention / what-to-reuse-or-avoid>** — <one-line distilled durable coding signal>
+   - **<gotcha / convention / what-to-reuse-or-avoid>** — <one-line distilled durable coding signal>
    ```
    Read the Directive's `## Success signals` section from its body (the same field `activation-reviewer` uses at completion time). For each signal, search the PR body / AC closeout comment for evidence; if no evidence is found, mark the signal as "not advanced by this PR" rather than fabricating a claim.
+
+   **Learnings section** (closes #477 signal 3 — the directive-level coding-memory loop). Distill durable coding signal from the merged PR's **Code phase** — codebase gotchas, conventions to follow, what to reuse vs avoid — so the next Execution under this Directive starts with the cross-Execution context the previous one paid to discover. When the `/implement` path authored the PR, also draw from the structured-return **discoveries** (§5.28). **Distillation heuristic**: keep only durable learning — signal that **outlives this PR** and would help a sibling Execution. **Churn is NOT a learning**: file reads, abandoned approaches, and lint/smoke iterations are within-Execution churn (the §1.2 / §3.7 discard boundary) and must not be transcribed here. If the PR surfaced no durable cross-Execution signal, omit the section's bullets rather than padding it.
+
+   **Idempotency unchanged**: the Learnings section rides **inside** the existing reflection comment, under the same `<!-- reflect-stub pr=#N -->` / `<!-- reflect-enriched pr=#N -->` marker — it is a fourth body section, not a new comment. The step-3 classification and the step-5 PATCH-by-REST-id enrich-in-place flow are therefore untouched.
 
 5. **Write the comment** — branch on step 3's classification. Pass the body via stdin / a temp file (`--body-file` / `-F body=@-`), **never** argument-interpolated, so PR/Directive text cannot inject `gh` arguments:
    - **enrich in place** (step 3 found the `reflect-stub`): edit the bot-authored stub by REST id — `printf '%s' "<composed>" | gh api -X PATCH "/repos/<owner>/<repo>/issues/comments/<id>" -F body=@-`. (`gh issue comment --edit-last` can't be used — it only edits the caller's own last comment, and the stub is authored by `github-actions[bot]`.) This swaps the `reflect-stub` marker for `reflect-enriched` in place, preserving the comment's position.
