@@ -12119,34 +12119,43 @@ else
   s126b_test=$(grep -ciE 'failing .{0,12}test|phase-?b test' "$S126_CMD" 2>/dev/null | tr -d ' ')
   s126b_spawn=$(grep -ciE 'subagent_type: *implementer|implementer subagent' "$S126_CMD" 2>/dev/null | tr -d ' ')
   s126b_absorb=$(grep -ciE 'structured return|absorb' "$S126_CMD" 2>/dev/null | tr -d ' ')
-  s126b_optin=$(grep -ciE 'opt-in|nothing auto-routes|not auto-routed|default .{0,30}unchanged' "$S126_CMD" 2>/dev/null | tr -d ' ')
+  # #492: implement.md flipped from the opt-in invariant to default-with-opt-out
+  # (Directive #477 signal-4 default-flip). The token now asserts the DEFAULT
+  # posture + the documented opt-out, not the old opt-in language.
+  s126b_default=$(grep -ciE 'default-with-opt-out|by default|opt-out' "$S126_CMD" 2>/dev/null | tr -d ' ')
   if [ "$s126b_manifest" -ge 1 ] && [ "$s126b_plan" -ge 1 ] && [ "$s126b_test" -ge 1 ] \
-     && [ "$s126b_spawn" -ge 1 ] && [ "$s126b_absorb" -ge 1 ] && [ "$s126b_optin" -ge 1 ]; then
-    ok "126b: /implement documents manifest assembly + implementer spawn + structured-return absorb + OPT-IN invariant (#486)"
+     && [ "$s126b_spawn" -ge 1 ] && [ "$s126b_absorb" -ge 1 ] && [ "$s126b_default" -ge 1 ]; then
+    ok "126b: /implement documents manifest assembly + implementer spawn + structured-return absorb + DEFAULT-with-opt-out invariant (#486/#492)"
   else
-    ng "126b: /implement missing a contract token (manifest=$s126b_manifest plan=$s126b_plan test=$s126b_test spawn=$s126b_spawn absorb=$s126b_absorb optin=$s126b_optin) (#486)"
+    ng "126b: /implement missing a contract token (manifest=$s126b_manifest plan=$s126b_plan test=$s126b_test spawn=$s126b_spawn absorb=$s126b_absorb default=$s126b_default) (#486/#492)"
   fi
 fi
 
-# §126c — opt-in / no-auto-route guard (the #477 signal-4 gate lock). The load-bearing
-# arm: the DEFAULT Code-phase flow must NOT auto-route to the implementer. /work-on.md
-# must not dispatch the implementer subagent, and no Stop/PostToolUse hook may
-# auto-invoke it. GREEN now (no reference exists today), goes RED the moment an
-# auto-route is wired — before the signal-4 measurement authorizes a default-flip.
-# NON-VACUOUS: fails loud if /work-on.md is missing (else the negative would green
-# on an absent file).
+# §126c — default-route guard (Directive #477 signal-4 default-flip, #492). The
+# load-bearing arm is INVERTED from the old opt-in lock: the DEFAULT Code-phase
+# flow now DOES route to the implementer. /work-on.md MUST dispatch the implementer
+# (a Phase-C step naming the implementer subagent / routing to it) AND document the
+# opt-out (trivial / glue edits stay in the main loop). The Stop/PostToolUse hook
+# NEGATIVE is PRESERVED: auto-routing lives in the /work-on doc procedure ONLY,
+# never in a hook (the native no-auto-invoke posture). The route grep keys on the
+# dispatch phrasing (NOT a bare "/implement" — that already appears in work-on step
+# 4.5's manifest read-back), so it stays 0 until the Phase-C routing step lands; the
+# opt-out grep is likewise 0 until then — either unmet arm keeps §126c RED before the
+# #492 Code phase. NON-VACUOUS: fails loud if /work-on.md is missing.
 S126_WORKON="$SHELL_ROOT/.claude/commands/work-on.md"
 if [ ! -f "$S126_WORKON" ]; then
-  ng "126c: .claude/commands/work-on.md missing — cannot assert no-auto-route (#486)"
+  ng "126c: .claude/commands/work-on.md missing — cannot assert default-route (#486/#492)"
 else
-  # NEGATIVE: /work-on must not dispatch the implementer subagent.
+  # POSITIVE (#492): /work-on MUST dispatch the implementer for the Code phase by default.
   s126c_workon_route=$(grep -ciE 'subagent_type: *implementer|implementer subagent|invoke .{0,20}implementer' "$S126_WORKON" 2>/dev/null | tr -d ' ')
-  # NEGATIVE: no Stop / PostToolUse hook may auto-invoke the implementer.
+  # POSITIVE (#492): /work-on MUST document the opt-out for trivial / glue edits.
+  s126c_optout=$(grep -ciE 'opt-out|stay in the main loop|trivial .{0,30}(glue|edit)' "$S126_WORKON" 2>/dev/null | tr -d ' ')
+  # NEGATIVE (PRESERVED): no Stop / PostToolUse hook may auto-invoke the implementer.
   s126c_hook_route=$(grep -rilE 'subagent_type: *implementer|invoke .{0,20}implementer|implementer subagent' "$SHELL_ROOT"/.claude/hooks/stop.sh "$SHELL_ROOT"/.claude/hooks/post_tool_use.sh 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$s126c_workon_route" = 0 ] && [ "$s126c_hook_route" = 0 ]; then
-    ok "126c: default Code-phase flow does NOT auto-route to implementer (/work-on + Stop/PostToolUse hooks clean) — #477 signal-4 gate intact (#486)"
+  if [ "$s126c_workon_route" -ge 1 ] && [ "$s126c_optout" -ge 1 ] && [ "$s126c_hook_route" = 0 ]; then
+    ok "126c: default Code-phase flow routes to implementer in /work-on (by default + documented opt-out) and NO Stop/PostToolUse hook auto-invokes it — #477 signal-4 default-flip (#492)"
   else
-    ng "126c: implementer is auto-routed before #477 signal-4 measurement (work-on=$s126c_workon_route hooks=$s126c_hook_route) — opt-in invariant broken (#486)"
+    ng "126c: default-route contract unmet (work-on-route=$s126c_workon_route opt-out=$s126c_optout hooks=$s126c_hook_route; want route>=1, opt-out>=1, hooks=0) (#492)"
   fi
 fi
 
@@ -12180,10 +12189,13 @@ fi
 
 # §127b — /work-on read-back. work-on.md must document reading accumulated learnings
 # from the Parent Directive and injecting them into the planner + the /implement
-# manifest's `directive-level learnings` field. CRITICAL: keys on NON-colliding
-# tokens (directive-level learnings / Parent Directive / manifest) — must NOT grep
-# for the §126c landmine substrings (the implementer-dispatch phrasings §126c
-# greps work-on.md for), and reintroduces none of them in this file either.
+# manifest's `directive-level learnings` field. Keys on NON-colliding tokens
+# (directive-level learnings / Parent Directive / manifest) that are independent of
+# the §126c dispatch phrasing. NOTE (#492): as of the signal-4 default-flip, §126c
+# now REQUIRES the implementer-dispatch phrasing in work-on.md (the default Phase-C
+# route), so this file legitimately contains those substrings — §127b deliberately
+# keys on its own disjoint tokens so the two sections stay consistent; it neither
+# greps for nor depends on the dispatch phrasing.
 S127_WORKON="$SHELL_ROOT/.claude/commands/work-on.md"
 if [ ! -f "$S127_WORKON" ]; then
   ng "127b: .claude/commands/work-on.md missing — read-back contract absent (#488)"
