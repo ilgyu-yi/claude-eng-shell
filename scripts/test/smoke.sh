@@ -12229,6 +12229,172 @@ else
   fi
 fi
 
+# ---------- §128: directive-close matcher (#490) ----------
+# A GitHub close keyword + Directive #N in a PR --body (inline) OR a commit
+# message auto-closes the Directive at merge, bypassing /complete-directive's
+# signal-evidence gate (§5.13). The directive-close matcher blocks that; an
+# Execution Issue auto-closing on merge stays correct. Two vectors (PR body +
+# commit message) × a 4-way matrix (Directive→block, Execution→allow,
+# non-close mention→allow, fail-open). Mirrors the §44 PATH-overlay gh-mock
+# fixture; GH_MOCK_FAIL=1 simulates gh down for the per-#N fail-open arm.
+# Mock issues: #93 = directive (the protected Directive); #92 = enhancement
+# (a non-Directive Execution-class Issue). KEY caution carried from plan
+# review: the commit vector must exercise a close keyword in a commit BODY
+# line (not just the subject) — extract_commit_subject is subject-only, so a
+# subject-only test would never reach the body where GitHub actually parses
+# the keyword. §128h/§128j cover the body-line and heredoc-body forms.
+DC_DIR=$(mktemp -d)
+DC_BIN="$DC_DIR/bin"
+DC_TARGET="$DC_DIR/target"
+DC_CACHE="$SMOKE_STATE/issue-type-cache"
+DC_AUDIT="$DC_DIR/audit.jsonl"
+mkdir -p "$DC_BIN" "$DC_TARGET"
+DC_TARGET=$(cd "$DC_TARGET" && pwd -P)
+( cd "$DC_TARGET" && git init -q && git checkout -q -b smoke-490-feature 2>/dev/null ) || true
+printf '%s\n' "$DC_TARGET" >> "$SMOKE_REG"
+
+cat > "$DC_BIN/gh" <<'DCMOCK'
+#!/usr/bin/env bash
+# Mock gh for §128 — same shape as §44: `gh issue view <n> --json labels`
+# returns GH_MOCK_LABELS_<n>; `gh repo view` returns smoke-owner/smoke-repo.
+emit() {
+  local full="$1"; shift
+  local expr="" next=0
+  for a in "$@"; do
+    if [ "$next" = 1 ]; then expr="$a"; next=0; continue; fi
+    [ "$a" = "-q" ] && next=1
+  done
+  if [ -n "$expr" ] && command -v jq >/dev/null 2>&1; then
+    printf '%s' "$full" | jq -r "$expr" 2>/dev/null
+  else
+    printf '%s' "$full"
+  fi
+}
+if [ "${GH_MOCK_FAIL:-}" = 1 ]; then exit 1; fi
+case "${1:-}" in
+  repo) [ "${2:-}" = view ] && emit '{"owner":{"login":"smoke-owner"},"name":"smoke-repo"}' "$@" ;;
+  issue)
+    if [ "${2:-}" = view ]; then
+      issue="$3"; var="GH_MOCK_LABELS_${issue}"; labels="${!var:-}"
+      arr="["; first=1; old_ifs="$IFS"; IFS=,
+      for l in $labels; do
+        [ -z "$l" ] && continue
+        [ "$first" = 1 ] && first=0 || arr="$arr,"
+        arr="$arr{\"name\":\"$l\"}"
+      done
+      IFS="$old_ifs"; arr="$arr]"
+      emit "{\"labels\":$arr}" "$@"
+    fi ;;
+esac
+exit 0
+DCMOCK
+chmod +x "$DC_BIN/gh"
+
+# dc_run <cmd> [SKIP_HOOKS] — feed <cmd> to pre_tool_use.sh as a Bash tool call.
+# Builds stdin JSON via python3 json.dumps so a command containing double
+# quotes / newlines (every directive-close case does) round-trips safely.
+dc_run() {
+  local cmd="$1" skip="${2:-}" stdin_json
+  stdin_json=$(CMD="$cmd" python3 -c 'import json,os; print(json.dumps({"tool_name":"Bash","tool_input":{"command":os.environ["CMD"]}}))')
+  (
+    cd "$DC_TARGET" || exit 0
+    PATH="$DC_BIN:$PATH" \
+    CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT" \
+    AUDIT_LOG_PATH="$DC_AUDIT" \
+    GH_MOCK_LABELS_92="enhancement" \
+    GH_MOCK_LABELS_93="directive" \
+    GH_MOCK_FAIL="${GH_MOCK_FAIL:-}" \
+    SKIP_HOOKS="$skip" \
+    SKIP_REASON="${skip:+smoke-test}" \
+      bash "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" <<< "$stdin_json"
+  )
+  return $?
+}
+
+if ! command -v python3 >/dev/null 2>&1; then
+  ok "128: directive-close matrix skipped — python3 absent (dc_run JSON encoder unavailable) (#490)"
+else
+  # ---- PR-body vector (gh pr create / gh pr edit --body) ----
+  rm -rf "$DC_CACHE"
+  # 128a: Directive close-keyword in --body → block.
+  rc=0; dc_run 'gh pr create --title "x" --body "Closes #93"' >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 2 ] && ok "128a: directive-close blocks 'Closes #93' (Directive) in gh pr create --body (#490)" \
+                || ng "128a: expected block(2) on Directive close-kw in PR body; got rc=$rc (#490)"
+
+  # 128b: Execution close-keyword in --body → allow (the central over-block guard).
+  rc=0; dc_run 'gh pr create --title "x" --body "Closes #92"' >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 0 ] && ok "128b: directive-close allows 'Closes #92' (Execution) in PR body — over-block guard (#490)" \
+                || ng "128b: expected allow(0) on Execution close-kw in PR body; got rc=$rc (#490)"
+
+  # 128c: non-close mention of a Directive (Refs/advances) → allow.
+  rc=0; dc_run 'gh pr create --title "x" --body "Refs #93 — advances #93 signal 3"' >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 0 ] && ok "128c: directive-close allows 'Refs #93 / advances #93' (no close keyword) (#490)" \
+                || ng "128c: expected allow(0) on non-close Directive mention; got rc=$rc (#490)"
+
+  # 128d: fail-open — gh unavailable → allow even a would-be-blocked Directive.
+  rm -rf "$DC_CACHE"; rc=0
+  GH_MOCK_FAIL=1 dc_run 'gh pr create --title "x" --body "Closes #93"' >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 0 ] && ok "128d: directive-close per-#N fail-open (allow) when gh is unavailable (#490)" \
+                || ng "128d: expected fail-open allow(0) on gh failure; got rc=$rc (#490)"
+  rm -rf "$DC_CACHE"
+
+  # 128e: multiple #N — block if ANY referenced Issue is a Directive.
+  rc=0; dc_run 'gh pr create --title "x" --body "Refs #92, closes #93"' >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 2 ] && ok "128e: directive-close blocks when ANY close-kw #N is a Directive (Refs #92, closes #93) (#490)" \
+                || ng "128e: expected block(2) when one of several #N is a Directive; got rc=$rc (#490)"
+
+  # 128f: case-insensitive keyword.
+  rc=0; dc_run 'gh pr create --title "x" --body "CLOSES #93"' >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 2 ] && ok "128f: directive-close keyword match is case-insensitive (CLOSES #93) (#490)" \
+                || ng "128f: expected block(2) on uppercase CLOSES #93; got rc=$rc (#490)"
+
+  # 128g: SKIP_HOOKS=directive-close bypasses the block.
+  rc=0; dc_run 'gh pr create --title "x" --body "Closes #93"' "directive-close" >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 0 ] && ok "128g: SKIP_HOOKS=directive-close bypasses the PR-body block (#490)" \
+                || ng "128g: SKIP_HOOKS=directive-close should allow; got rc=$rc (#490)"
+
+  # 128n: --body-file is a documented residual — NOT read, so not blocked.
+  rc=0; dc_run 'gh pr create --title "x" --body-file notes-93.md' >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 0 ] && ok "128n: directive-close does not read --body-file (documented residual) (#490)" \
+                || ng "128n: --body-file residual should not block; got rc=$rc (#490)"
+
+  # ---- Commit-message vector (commit-format umbrella sub-check) ----
+  # Runs on smoke-490-feature (non-protected) with a valid CC subject, so the
+  # only thing that can block is the directive-close body scan.
+  rm -rf "$DC_CACHE"
+  # 128h: close keyword in a commit BODY line (2nd -m), NOT the subject → block.
+  #       extract_commit_subject returns only "fix(#92): x"; the body must still be scanned.
+  rc=0; dc_run 'git commit -m "fix(#92): x" -m "Closes #93"' >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 2 ] && ok "128h: directive-close blocks a close-kw in a commit BODY line, not just the subject (#490)" \
+                || ng "128h: expected block(2) on Directive close-kw in commit body; got rc=$rc (#490)"
+
+  # 128i: Execution close-keyword in commit body → allow.
+  rc=0; dc_run 'git commit -m "fix(#92): x" -m "Closes #92"' >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 0 ] && ok "128i: directive-close allows 'Closes #92' (Execution) in commit body (#490)" \
+                || ng "128i: expected allow(0) on Execution close-kw in commit body; got rc=$rc (#490)"
+
+  # 128j: heredoc commit-message body carrying the close keyword → block.
+  rc=0; dc_run 'git commit -m "$(cat <<'\''EOF'\''
+fix(#92): x
+
+resolves #93
+EOF
+)"' >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 2 ] && ok "128j: directive-close blocks a close-kw in a heredoc commit-message body (#490)" \
+                || ng "128j: expected block(2) on Directive close-kw in heredoc body; got rc=$rc (#490)"
+
+  # 128k: SKIP_HOOKS=directive-close bypasses the commit-vector block.
+  rc=0; dc_run 'git commit -m "fix(#92): x" -m "Closes #93"' "directive-close" >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 0 ] && ok "128k: SKIP_HOOKS=directive-close bypasses the commit-message block (#490)" \
+                || ng "128k: SKIP_HOOKS=directive-close should allow commit; got rc=$rc (#490)"
+
+  # 128l: commit-vector fail-open — gh unavailable → allow.
+  rm -rf "$DC_CACHE"; rc=0
+  GH_MOCK_FAIL=1 dc_run 'git commit -m "fix(#92): x" -m "Closes #93"' >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 0 ] && ok "128l: directive-close commit vector fails open when gh is unavailable (#490)" \
+                || ng "128l: expected fail-open allow(0) on gh failure (commit); got rc=$rc (#490)"
+fi
+
 # ---------- §110: README assertion-count floor (#409) ----------
 # README's "Verify" block advertises an assertion count as "<N>+". A count that
 # OVERSTATES coverage (claims more than the suite runs) is the misleading
