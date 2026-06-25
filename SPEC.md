@@ -1093,7 +1093,7 @@ This **parallel** N=3 is distinct from §4.9.1's **serial** N=3 (the `revise`→
 git commit -m "chore: seed first commit (MISSION + README)"  # claude-eng:skip=branch reason=stage-0-bootstrap-seed-on-unborn-HEAD
 ```
 
-Run in a real terminal there is no hook in the path, so the commit succeeds directly; where a hook *is* present and an escape is delivered (the smoke harness, or a future in-agent channel, #479), the bypass routes through `should_skip branch` and is recorded in `audit.jsonl`. This generalizes the **shell's own-repo** first-commit exception (§16 item 15) to *target* repos: both are the same chicken-and-egg case (the first commit cannot ride a flow that presupposes a prior commit).
+Run in a real terminal, there is no hook in the path, so the commit succeeds directly; where a hook *is* present and an escape is delivered (the smoke harness, or a future in-agent channel, #479), the bypass routes through `should_skip branch` and is recorded in `audit.jsonl`. This generalizes the **shell's own-repo** first-commit exception (§16 item 15) to *target* repos: both are the same chicken-and-egg case (the first commit cannot ride a flow that presupposes a prior commit).
 
 **Steps**:
 

@@ -106,9 +106,10 @@ print(json.dumps({"env": env, "cmd": rest}))
 # terminal (no PreToolUse hook fires there) or via a non-protected branch +
 # rename. Full contract + recourse: SPEC §7. Restoring an in-agent channel is
 # tracked in #479. (The parsing contract below is still exercised by the smoke
-# harness and a real shell that passes the prefix verbatim.) MUST be called on
-# the RAW command BEFORE the
-# hook's whitespace-normalization + shlex pass, which would quote/mangle the `#`.
+# harness and a real shell that passes the prefix verbatim.)
+#
+# MUST be called on the RAW command BEFORE the hook's whitespace-normalization
+# + shlex pass, which would quote/mangle the `#`.
 # The `claude-eng:skip=` namespace keeps an ordinary trailing comment from being
 # read as an escape; the sentinel is one-shot (it travels with the single
 # command — no persistent bypass state). All `[A-Za-z0-9,_-]` category chars
