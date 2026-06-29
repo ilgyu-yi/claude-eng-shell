@@ -1089,14 +1089,23 @@ case "$tool" in
       sens_rp=$(printf '%s' "$target" | python3 -c 'import os,sys; sys.stdout.write(os.path.realpath(sys.stdin.read()))' 2>/dev/null)
       [ -n "$sens_rp" ] && sens_resolved=$(basename "$sens_rp")
     fi
-    sens_hit=
-    case "$base" in
-      .env|.env.*|*.pem|credentials|credentials.*|id_rsa|id_rsa.*|id_ed25519|id_ed25519.*) sens_hit=1 ;;
-    esac
-    if [ -z "$sens_hit" ] && [ -n "$sens_resolved" ]; then
-      case "$sens_resolved" in
-        .env|.env.*|*.pem|credentials|credentials.*|id_rsa|id_rsa.*|id_ed25519|id_ed25519.*) sens_hit=1 ;;
+    # #501: match case-INSENSITIVELY (so `.ENV`/`X.PEM` don't slip past) and use
+    # the documented `credentials*`/`id_rsa*`/`id_ed25519*` PREFIX globs (SPEC
+    # §6.1 / CLAUDE.md) rather than the narrower `credentials.*` — so
+    # `credentialsX`/`id_rsa_backup` block — plus `*.pem.*` for a double-extension
+    # backup key (`key.pem.txt`). One helper, used for both the lexical basename
+    # and the symlink-resolved one, so the two can't drift.
+    _sens_match() {  # $1 = basename → rc 0 if it names a sensitive file
+      local b; b=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+      case "$b" in
+        .env|.env.*|*.pem|*.pem.*|credentials*|id_rsa*|id_ed25519*) return 0 ;;
       esac
+      return 1
+    }
+    sens_hit=
+    _sens_match "$base" && sens_hit=1
+    if [ -z "$sens_hit" ] && [ -n "$sens_resolved" ]; then
+      _sens_match "$sens_resolved" && sens_hit=1
     fi
     if [ -n "$sens_hit" ]; then
       should_skip sensitive || block sensitive "sensitive file edit blocked: $target${sens_resolved:+ (symlink to a sensitive target)}"

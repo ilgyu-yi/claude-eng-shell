@@ -405,6 +405,27 @@ rc=$?
               || ng "234: symlink to non-sensitive target wrongly blocked (rc=$rc) (#234)"
 rm -f "$TMP/fake/notes_link"
 
+# ---- §501a-g (#501 / Directive #498): sensitive-file matcher case-fold +
+# documented-contract globs. In-scope paths under $TMP/fake/sub so the
+# out-of-scope arm doesn't pre-empt; basenames need not exist (lexical match).
+s501_run() {  # $1 = basename → echoes the hook rc for an Edit under $TMP/fake/sub
+  ( cd "$TMP/fake" && fake_input "Edit" "{\"file_path\":\"$TMP/fake/sub/$1\"}" \
+    | "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" >/dev/null 2>&1 ); echo $?
+}
+# 501a/b (case-fold): uppercase variants of sensitive basenames must block.
+[ "$(s501_run '.ENV')" = 2 ]    && ok "501a: '.ENV' (case variant) edit blocked (#501)"        || ng "501a: '.ENV' not blocked — case-sensitive matcher (#501)"
+[ "$(s501_run 'key.PEM')" = 2 ] && ok "501b: 'key.PEM' (case variant) edit blocked (#501)"     || ng "501b: 'key.PEM' not blocked — case-sensitive matcher (#501)"
+# 501c/d (documented-contract prefix globs): `credentials*` / `id_rsa*` per the
+# SPEC §6.1 / CLAUDE.md contract (code used the narrower `credentials.*`).
+[ "$(s501_run 'credentialsX')" = 2 ]  && ok "501c: 'credentialsX' edit blocked (credentials* contract) (#501)"  || ng "501c: 'credentialsX' not blocked — code narrower than documented contract (#501)"
+[ "$(s501_run 'id_rsa_backup')" = 2 ] && ok "501d: 'id_rsa_backup' edit blocked (id_rsa* contract) (#501)"      || ng "501d: 'id_rsa_backup' not blocked — code narrower than contract (#501)"
+# 501e (double-extension): a renamed/backup key like `key.pem.txt` must block.
+[ "$(s501_run 'key.pem.txt')" = 2 ] && ok "501e: 'key.pem.txt' (double-extension) edit blocked (#501)" || ng "501e: 'key.pem.txt' not blocked — double-extension evasion (#501)"
+# 501f (no over-block GUARD — must stay green): an in-scope non-sensitive file is allowed.
+[ "$(s501_run 'notes.md')" = 0 ]  && ok "501f: in-scope 'notes.md' still allowed (no over-block) (#501)" || ng "501f: non-sensitive 'notes.md' wrongly blocked (#501)"
+# 501g (regression): the canonical lowercase '.env' still blocks.
+[ "$(s501_run '.env')" = 2 ]      && ok "501g: '.env' still blocked (lowercase regression) (#501)"        || ng "501g: '.env' regression — no longer blocked (#501)"
+
 # Bash rm -rf $HOME
 out=$(cd "$TMP/fake" && fake_input "Bash" "{\"command\":\"rm -rf \$HOME/somewhere\"}" \
   | "$SHELL_ROOT/.claude/hooks/pre_tool_use.sh" 2>&1)
