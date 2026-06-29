@@ -3883,6 +3883,17 @@ rm -f "$SS502_STATE/registry.txt"
 [ "$(ss502_run "smoke-502c-$$")" = 0 ] \
   && ok "502c: absent registry → detector silent (transparent unregistered case) (#502)" \
   || ng "502c: absent registry wrongly fired the detector (#502)"
+# 502e: the PERSISTENT half — an empty registry must write a queryable
+# `registry-zeroed` audit record (not just the ephemeral stderr banner), else
+# the disarmed state stays traceless in the LOG (the audit_log arity bug). Fresh
+# empty-registry run, then grep the audit aggregate under the override dir.
+: > "$SS502_STATE/registry.txt"
+ss502_run "smoke-502e-$$" >/dev/null 2>&1
+if grep -rqs 'registry-zeroed' "$SS502_STATE" 2>/dev/null; then
+  ok "502e: empty registry writes a persistent 'registry-zeroed' audit record (#502)"
+else
+  ng "502e: no persistent registry-zeroed audit record — disarmed state traceless in the log (#502)"
+fi
 rm -rf "$SS502_TMPDIR" "$SS502_STATE"
 # 502d: SPEC §6.5(c) documents the registry-zeroed detector AND the
 # binding-repoint residual + the §1.4 "no fail-open flip" decision.

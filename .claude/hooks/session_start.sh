@@ -63,7 +63,7 @@ if [ -n "$_ce_reg" ] && [ -f "$_ce_reg" ] && ! grep -q '[^[:space:]]' "$_ce_reg"
   fi
   # Audit record in a SUBSHELL so any audit_log misbehavior (e.g. a `set -u`
   # abort on an unusual env) cannot kill this hook before/after the banner.
-  ( audit_log warn registry-zeroed "per-project registry present-but-empty → enforcement OFF (in_scope fails open): $_ce_reg" ) >/dev/null 2>&1 || true
+  ( audit_log warn registry-zeroed notice "per-project registry present-but-empty → enforcement OFF (in_scope fails open): $_ce_reg" ) >/dev/null 2>&1 || true
 fi
 
 # 1) Shell self-sync check — always runs regardless of target cwd.
