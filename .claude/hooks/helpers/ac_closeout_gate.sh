@@ -17,7 +17,7 @@
 
 extract_pr_from_merge_cmd() {
   local cmd="$1"
-  local rest token
+  local rest token skip_next=""
   # Strip up to and including `gh pr merge`; the remainder is the argv.
   # No `\b` — BSD sed (macOS) doesn't recognize it. The grep matcher in
   # pre_tool_use.sh already validated that `gh pr merge` is present as a
@@ -34,8 +34,21 @@ extract_pr_from_merge_cmd() {
   local _opts=$-
   set -f
   for token in $rest; do
+    if [ -n "$skip_next" ]; then skip_next=""; continue; fi
     case "$token" in
+      # #500: value-taking flags consume their next token — mirror
+      # parse_gh_merge_argv exactly, so a `/pull/N` inside a --body/--subject
+      # VALUE is not mis-read as the PR selector (security-review finding).
+      --body|-b|--body-file|--subject|-t|--match-head-commit|--author-email|--repo|-R) skip_next=1; continue ;;
       -*) continue ;;
+      */pull/*)   # #500: a PR URL selector (`…/pull/N`) — gh accepts it for
+                  # `gh pr merge`. Take the digits after the LAST `/pull/`; the
+                  # sibling merge-strategy parser (parse_gh_merge_argv) already
+                  # handles this form, so without it ac-closeout diverged and
+                  # evaluated the wrong (current-branch) PR.
+        token="${token##*/pull/}"; token="${token%%[!0-9]*}"
+        [ -n "$token" ] && { case "$_opts" in *f*) ;; *) set +f ;; esac; printf '%s' "$token"; return 0; }
+        continue ;;
       *[!0-9]*) continue ;;   # only pure-integer tokens count as PR number
       [0-9]*) case "$_opts" in *f*) ;; *) set +f ;; esac; printf '%s' "$token"; return 0 ;;
     esac
@@ -186,15 +199,25 @@ pr_needs_closeout() {
     body=$(_ac_run_gh issue view "$n" --json body -q .body 2>/dev/null)
     rc=$?
     [ "$rc" != 0 ] && return 2
-    # No unchecked AC on this issue → it's fine.
-    if ! printf '%s' "$body" | grep -q '^- \[ \]'; then
+    # No unchecked AC on this issue → it's fine. #500: recognize all common
+    # GitHub task-list bullets (`-`/`*`/`+` and ordered `N.`), optionally
+    # indented — not just `- [ ]` — so an unchecked box written another way
+    # isn't mistaken for AC-clean.
+    if ! printf '%s' "$body" | grep -qE '^[[:space:]]*([-*+]|[0-9]+\.)[[:space:]]+\[ \]'; then
       continue
     fi
-    comments=$(_ac_run_gh issue view "$n" --json comments -q '.comments[].body' 2>/dev/null)
+    # #500: the closeout marker must be (a) the canonical machine shape
+    # `## AC closeout (resolved by PR #N)` — a comment that merely starts with
+    # `## AC closeout` no longer satisfies the gate — AND (b) authored by a
+    # trusted filer (OWNER/MEMBER/MAINTAINER/COLLABORATOR), so a drive-by comment
+    # from an untrusted account cannot unlock the merge. The author filter runs
+    # as a jq `select` at the gh boundary; only trusted comment bodies return.
+    comments=$(_ac_run_gh issue view "$n" --json comments \
+      -q '.comments[] | select((.authorAssociation // "") | (. == "OWNER" or . == "MEMBER" or . == "MAINTAINER" or . == "COLLABORATOR")) | .body' 2>/dev/null)
     rc=$?
     [ "$rc" != 0 ] && return 2
-    # Marker present → covered.
-    if printf '%s' "$comments" | grep -q '^## AC closeout'; then
+    # Canonical marker from a trusted author present → covered.
+    if printf '%s' "$comments" | grep -qE '^## AC closeout \(resolved by PR #[0-9]+\)'; then
       continue
     fi
     # Any one issue missing the marker triggers the block.
