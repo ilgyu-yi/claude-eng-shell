@@ -8550,6 +8550,19 @@ if grep -qF '*test*' "$SHELL_ROOT/.claude/CLAUDE.md" 2>/dev/null; then
 else
   ok "71f: CLAUDE.md no longer cites the stale *test*/*example* globs (#217)"
 fi
+# 71g (#513 / Directive #498 residual): CLAUDE.md's SessionStart-banner line must
+# name BOTH detectable silent-no-op states — `hookrt.sh` missing AND the
+# registry-zeroed disarm (#502, SPEC §6.5(c)) — and must NOT assert "the one"
+# (a count claim the SSOT contradicts since #502 added the second detector).
+s71g_md="$SHELL_ROOT/.claude/CLAUDE.md"
+s71g_line=$(grep -iE 'SessionStart banner' "$s71g_md" 2>/dev/null)
+if printf '%s' "$s71g_line" | grep -qiE 'hookrt' \
+   && printf '%s' "$s71g_line" | grep -qiE 'registr' \
+   && ! printf '%s' "$s71g_line" | grep -qiE 'the one detectable silent-no-op'; then
+  ok "71g: CLAUDE.md SessionStart line names both silent-no-op detectors (hookrt + registry), no stale 'the one' count (#513)"
+else
+  ng "71g: CLAUDE.md SessionStart line stale — must name both hookrt + registry-zeroed detectors, drop 'the one' (#513)"
+fi
 
 # ---------- 72. robustness cluster: release_consolidate + ac_closeout symmetry (#218) ----------
 # Script-content assertions (the affected scripts talk to git/gh and aren't
