@@ -6662,6 +6662,28 @@ case $? in
   *) ng "62e3: expected rc=2 (block) for --reason duplicate, got rc=$? (#216)" ;;
 esac
 
+# §62g/§62h (#499 / Directive #498): a leading gh GLOBAL FLAG before `issue close`
+# must not bypass the trusted-filer-mutate entry anchor (pre_tool_use.sh :459).
+# The tight `\bgh[[:space:]]+issue[[:space:]]+(close|edit)` anchor missed
+# `gh -R o/r issue close` / `gh --repo o/r issue close`; the #499 fix widens it to
+# tolerate a leading global-flag run. Placed inside §62 (before the cleanup
+# below) so the fresh s62 mock/target is in scope. §62g is RED before the fix
+# (leading flag → arm never enters → allow); §62h is the no-over-block guard.
+# §62g: leading -R before `issue close` (no --reason) on the discussion/OWNER
+# Issue must BLOCK (rc=2), exactly as the bare §62c form does.
+s62_close_run "gh -R o/r issue close 999"
+case $? in
+  2) ok "62g: leading -R before 'issue close' → trusted-filer still blocks (#499)" ;;
+  *) ng "62g: leading -R bypassed trusted-filer-mutate, got rc=$? (#499)" ;;
+esac
+# §62h: leading --repo + a valid `--reason completed` close must still ALLOW (rc=0)
+# — the widened anchor must not over-block the compliant completed-close path.
+s62_close_run "gh --repo mock/repo issue close 999 --reason completed"
+case $? in
+  0) ok "62h: leading --repo + --reason completed still allowed (no over-block) (#499)" ;;
+  *) ng "62h: leading-flag completed close wrongly blocked, got rc=$? (#499)" ;;
+esac
+
 # Cleanup §62.
 sp_tmp_reg=$(mktemp); grep -vxF "$S62_TARGET" "$SMOKE_REG" > "$sp_tmp_reg" 2>/dev/null || true
 mv "$sp_tmp_reg" "$SMOKE_REG"
@@ -12407,6 +12429,59 @@ EOF
   [ "$rc" = 0 ] && ok "128l: directive-close commit vector fails open when gh is unavailable (#490)" \
                 || ng "128l: expected fail-open allow(0) on gh failure (commit); got rc=$rc (#490)"
 fi
+
+# ---------- §129: leading gh global flag must not bypass the gh-command gates (#499 / Directive #498) ----------
+# A gh persistent/global flag before the subcommand (`gh --repo o/r pr merge`,
+# `gh -R o/r issue close`) evaded the TIGHT entry anchors of merge-strategy
+# (pre_tool_use.sh :259), ac-closeout (:336), and trusted-filer-mutate (:459) —
+# while the directive-close arm (:795) already tolerated a leading run and caught
+# the same form. The fix widens the three tight gh arms to tolerate a leading
+# GLOBAL-FLAG run (`-X`/`--xxx[=v]` plus an optional non-flag value, e.g. the
+# `o/r` of `--repo o/r`) while still requiring the subcommand tokens ADJACENT —
+# so it must NOT over-match a `merge`/`close` word buried in a `pr create` body
+# or title. RED before the #499 fix (leading-flag forms returned allow); the
+# over-block guards (129e) are GREEN today and must STAY green. Reuses the
+# §78 (pt78_run), §38 (gh38_run), §62 (s62_close_run) harnesses.
+
+# 129a/b/c (merge-strategy, :259): a leading global flag before `pr merge` +
+# squash to the default branch must BLOCK (rc=2), exactly as the bare form does.
+[ "$(pt78_run 'gh --repo o/r pr merge 200 --squash')" = 2 ] \
+  && ok "129a: leading --repo <val> before 'pr merge' → squash still blocked (#499)" \
+  || ng "129a: leading --repo bypassed merge-strategy (#499)"
+[ "$(pt78_run 'gh -R o/r pr merge 200 --squash')" = 2 ] \
+  && ok "129b: leading -R <val> before 'pr merge' → squash still blocked (#499)" \
+  || ng "129b: leading -R bypassed merge-strategy (#499)"
+[ "$(pt78_run 'gh --repo=o/r pr merge 200 --squash')" = 2 ] \
+  && ok "129c: leading --repo=val (equals form) before 'pr merge' → squash still blocked (#499)" \
+  || ng "129c: leading --repo=val bypassed merge-strategy (#499)"
+
+# 129d (no over-block of the compliant path): leading flag + --merge → ALLOW.
+[ "$(pt78_run 'gh --repo o/r pr merge 200 --merge')" = 0 ] \
+  && ok "129d: leading --repo + --merge still allowed (#499)" \
+  || ng "129d: leading-flag --merge wrongly blocked (#499)"
+
+# 129e (OVER-BLOCK GUARD — must stay GREEN): the word `merge` buried in a
+# `pr create` body/title must NOT trip merge-strategy (the widened anchor must
+# require `pr merge` ADJACENT after the global-flag run, not anywhere). ALLOW(0).
+[ "$(pt78_run 'gh pr create --title fix --body "see the pr merge discussion thread"')" = 0 ] \
+  && ok "129e: 'merge' inside a pr-create body does NOT trip merge-strategy (over-block guard) (#499)" \
+  || ng "129e: widened anchor over-blocks a pr-create whose body contains 'merge' (#499)"
+
+# 129f (ac-closeout, :336): leading --repo before `pr merge --merge` with an
+# unchecked-AC linked issue + no closeout marker must BLOCK.
+gh38_reset
+printf '100\n' > "$GH38_STATE/pr_issues"
+printf -- '- [ ] do the thing\n' > "$GH38_STATE/issue_body"
+: > "$GH38_STATE/issue_comments"
+out129f=$(gh38_run "gh --repo o/r pr merge 200 --merge"); rc129f=$?
+if [ "$rc129f" = 2 ] && printf '%s' "$out129f" | grep -q 'ac-closeout'; then
+  ok "129f: leading --repo before 'pr merge' → ac-closeout still blocks unchecked AC (#499)"
+else
+  ng "129f: leading --repo bypassed ac-closeout (rc=$rc129f) (#499)"
+fi
+# (The trusted-filer :459 arm's leading-global-flag cases are §62f/§62g, placed
+# in the §62 block where the s62 mock/target harness is fresh — reusing it here
+# at end-of-file is unreliable.)
 
 # ---------- §110: README assertion-count floor (#409) ----------
 # README's "Verify" block advertises an assertion count as "<N>+". A count that
