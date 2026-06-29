@@ -188,7 +188,14 @@ case "$tool" in
     # filename like `my-rf-file` is not matched). Over-entry is harmless:
     # check_destructive_args makes the real in-scope/out-of-scope decision and
     # already inspects every operand regardless of flag position.
-    if printf '%s' "$cmd" | grep -qE '\b(rm|mv|cp)\s+([^;|&]*\s)?(-[A-Za-z]*[fFrR][A-Za-z]*|--force|--recursive)(\s|$)'; then
+    if printf '%s' "$cmd" | grep -qE '\b(rm|mv|cp)\s+([^;|&]*\s)?(-[A-Za-z]*[fFrR][A-Za-z]*|--force|--recursive)(\s|$)' \
+       || printf '%s' "$cmd" | grep -qE '\b(mv|cp)\s+[^-;|&[:space:]]'; then
+      # #505: the second arm enters check_destructive_args for a FLAGLESS mv/cp
+      # that has an operand — a flagless `mv in /out` clobbers an out-of-registry
+      # DEST yet carries no force/recursive flag, so the first (flag-keyed) arm
+      # missed it. check_destructive_args inspects EVERY operand (incl. the dest),
+      # so an all-in-scope mv/cp still passes; `rm` is intentionally NOT broadened
+      # (an unforced single-file rm stays un-gated, #212).
       decided=
       if ! check_destructive_args "$cmd"; then
         should_skip out-of-scope && decided=1 || block out-of-scope "destructive command points outside registry: $cmd"
@@ -576,7 +583,10 @@ case "$tool" in
           fi
           tf_completed=
           tf_not_planned=
-          if [[ "$cmd" =~ --reason[[:space:]]+completed ]]; then tf_completed=1; fi
+          # #505: accept the equals form `--reason=completed` (gh-valid) too,
+          # mirroring the matcher's other `[=[:space:]]` selectors — the
+          # space-only form falsely blocked a legitimate completed-close.
+          if [[ "$cmd" =~ --reason[=[:space:]]+completed ]]; then tf_completed=1; fi
           # Tolerate both the gh-valid space form (`--reason "not planned"`,
           # optionally quoted) and the legacy underscore (#216).
           tf_notplanned_re='--reason[=[:space:]]+["'"'"']?not[_[:space:]]planned'

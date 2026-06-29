@@ -208,6 +208,7 @@ issue_has_parent_marker() {
     body=$(gh issue view "$issue" --json body -q .body 2>/dev/null) || return 2
   fi
   first_line=$(printf '%s\n' "$body" | head -1 || true)
+  first_line=${first_line%$'\r'}  # #505: tolerate a trailing CRLF \r (Windows/paste)
   if printf '%s' "$first_line" | grep -qE '^Parent Directive: #[0-9]+$'; then
     return 0
   fi
@@ -240,6 +241,7 @@ issue_has_initiative_parent_marker() {
     body=$(gh issue view "$issue" --json body -q .body 2>/dev/null) || return 2
   fi
   first_line=$(printf '%s\n' "$body" | head -1 || true)
+  first_line=${first_line%$'\r'}  # #505: tolerate a trailing CRLF \r (Windows/paste)
   if printf '%s' "$first_line" | grep -qE '^Parent Initiative: #[0-9]+$'; then
     return 0
   fi
