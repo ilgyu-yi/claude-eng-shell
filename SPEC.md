@@ -2089,7 +2089,7 @@ Draft body for `gh pr create --body-file`, authored by `/work-on` (§5.3) and cu
 
 ### 9.4 `adr.md`
 
-Draft body for an Architecture Decision Record, authored by `/adr` for irreversible decisions; authoritative body in `.claude/templates/adr.md` (substitutes `{{ number }}`, `{{ title }}`, `{{ today }}`, `{{ pr }}`). Fixed sections: a header (`# ADR {{ number }}: {{ title }}` + Date / `Status` / Context PR lines), `## Context`, `## Decision`, `## Alternatives considered` (each with why-rejected), `## Consequences`, `## Notes`. Linked from the PR body `## Decisions` section (§9.3).
+Draft body for an Architecture Decision Record, authored by `/adr` for irreversible decisions; authoritative body in `.claude/templates/adr.md` (substitutes `{{ number }}`, `{{ title }}`, `{{ today }}`, `{{ pr }}`). Fixed sections: a header (`# ADR {{ number }}: {{ title }}` + Date / `Status` / Context PR lines), `## Context`, `## Decision`, `## Alternatives considered` (each with why-rejected), `## Consequences`, `## Notes`. `Status` follows the lifecycle `Proposed` → `Accepted` → `Superseded by ADR-<M>` (the file seeds `Proposed`). Linked from the PR body `## Decisions` section (§9.3).
 
 ### 9.5 `pr_template_for_target.md`, `issue_template_for_target.md`
 
