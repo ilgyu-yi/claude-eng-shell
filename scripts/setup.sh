@@ -99,7 +99,7 @@ else
 fi
 
 # 4. dir-mode adoption gate — always offered, default N, non-TTY/EOF falls back to N
-#    (mirrors bin/claude-eng's `read -r resp || resp=...` pattern). Only y/Y proceeds.
+#    (mirrors bin/ghjig's `read -r resp || resp=...` pattern). Only y/Y proceeds.
 printf '\nInstall dir-mode substrate (labels + issue templates + workflows + Project)?\n'
 printf 'This opens a PR into the target repo (never a direct push). [y/N] '
 read -r resp || resp=N
@@ -123,7 +123,7 @@ if [ -d "$target_dir" ]; then
 else
   printf '  cd <target> && claude\n'
 fi
-printf '\nOptional — to run `claude-eng` from any directory, add this yourself (we never edit your shell startup files):\n'
+printf '\nOptional — to run `ghjig` from any directory, add this yourself (we never edit your shell startup files):\n'
 printf '  export PATH="%s/bin:$PATH"\n' "$SHELL_ROOT"
 
 if [ "$ENTER" -eq 1 ] && [ -d "$target_dir" ]; then

@@ -6,7 +6,7 @@ usage() { echo "usage: clone-into.sh <upstream-repo-url>" >&2; exit 2; }
 
 URL="$1"
 SHELL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-export CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT"
+export GHJIG_SHELL_ROOT="$SHELL_ROOT"
 
 . "$SHELL_ROOT/scripts/lib/inject.sh"
 
@@ -24,8 +24,8 @@ inject_into "$TARGET"
 # Fork detection
 if command -v gh >/dev/null 2>&1; then
   if (cd "$TARGET" && gh repo view --json isFork --jq .isFork 2>/dev/null | grep -q true); then
-    echo "WARN: this repo is a fork. claude-eng-shell is upstream-only." >&2
+    echo "WARN: this repo is a fork. GHJig-Claude is upstream-only." >&2
   fi
 fi
 
-echo "next: cd $TARGET && claude-eng"
+echo "next: cd $TARGET && ghjig"

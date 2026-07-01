@@ -3,6 +3,6 @@ workspace/*
 !workspace/README.md
 .claude/audit/
 .claude/state/
-.claude/eng-state/
+.claude/ghjig-state/
 .DS_Store
 **/.DS_Store

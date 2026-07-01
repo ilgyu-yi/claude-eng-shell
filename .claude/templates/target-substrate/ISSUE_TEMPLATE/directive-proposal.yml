@@ -8,7 +8,7 @@ body:
       value: |
         A Directive is a **directing context**, not a unit of work. It names what scope of work is worth doing over a few weeks and gives Execution Issues a coherent parent to live under. The maintainer reviews this proposal via `/triage` and either accepts (Status → Active) or rejects (refiled in a different template).
 
-        Before filing, scan [`MISSION.md`](../blob/main/MISSION.md) and the [open Directives](https://github.com/ilgyu-yi/claude-eng-shell/issues?q=is%3Aopen+label%3Adirective) to make sure this proposal doesn't duplicate existing direction.
+        Before filing, scan [`MISSION.md`](../blob/main/MISSION.md) and the [open Directives](https://github.com/ilgyu-yi/GHJig-Claude/issues?q=is%3Aopen+label%3Adirective) to make sure this proposal doesn't duplicate existing direction.
 
   - type: textarea
     id: objective

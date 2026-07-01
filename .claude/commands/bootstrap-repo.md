@@ -14,7 +14,7 @@ The protected-branch gate (SPEC §6.1) is **name-based** (`PROTECTED_BRANCH_PATT
 Because this skill runs **in-harness** (the live Bash tool strips both in-command escape forms before the hook sees them, #478), the seed commit uses the **file-based skip token** (SPEC §7) — the in-agent channel the harness cannot strip. Write a `branch`-category token whose fingerprint is the seed-commit subject, immediately before the commit:
 
 ```
-scripts/eng_skip.sh branch 'chore: seed first commit (MISSION + README)' 'stage-0-bootstrap-seed-on-unborn-HEAD'
+scripts/ghjig_skip.sh branch 'chore: seed first commit (MISSION + README)' 'stage-0-bootstrap-seed-on-unborn-HEAD'
 git commit -m "chore: seed first commit (MISSION + README)"
 ```
 
@@ -31,20 +31,20 @@ The hook reads the token at fire time, audits it, and **consumes** it; the bypas
 
 3. **Seed the SSOT files** — copy the two templates into place **with Bash `cp`, not the Edit/Write tool**:
    ```bash
-   cp "$CLAUDE_ENG_SHELL_ROOT/.claude/templates/mission.md" MISSION.md
-   cp "$CLAUDE_ENG_SHELL_ROOT/.claude/templates/readme_for_target.md" README.md
+   cp "$GHJIG_SHELL_ROOT/.claude/templates/mission.md" MISSION.md
+   cp "$GHJIG_SHELL_ROOT/.claude/templates/readme_for_target.md" README.md
    ```
    Why `cp` and not Write: the Edit/Write protected-branch arm (SPEC §6.1) blocks writes on the unborn-HEAD `main`, and a trailing sentinel cannot disarm it (an Edit/Write tool call has no command string to carry the sentinel). A `cp` into the registered target path carries no protected-branch check and is in-scope, so it is the correct seeding path. The templates carry `{{ today }}` / `{{ repo_name }}` placeholders — these are drafts for the user to complete after bootstrap; substitute them now only if the values are unambiguous (e.g. `{{ repo_name }}` from `basename "$PWD"`), otherwise leave them for `/onboard`'s SSOT step to flag.
 
 4. **Seed commit** — stage exactly the two seed files, write the `branch` file token (fingerprint = the seed-commit subject), then commit:
    ```bash
    git add MISSION.md README.md
-   scripts/eng_skip.sh branch 'chore: seed first commit (MISSION + README)' 'stage-0-bootstrap-seed-on-unborn-HEAD'
+   scripts/ghjig_skip.sh branch 'chore: seed first commit (MISSION + README)' 'stage-0-bootstrap-seed-on-unborn-HEAD'
    git commit -m "chore: seed first commit (MISSION + README)"
    ```
    The token is one-shot (consumed on read, 60s TTL — SPEC §7); running the commit in a real terminal is the fallback. The message is a `chore` (no issue # required — there is no issue tracker state yet).
 
-5. **Audit** — the seed commit's bypass is *already* recorded by the `branch` escape's `should_skip` path (this is the load-bearing audit guarantee — never silent). Additionally emit an explicit stage-0 record by sourcing the hook runtime and calling `audit_log info bootstrap-repo seeded "branch=main remote=<origin-url-or-none> files=MISSION.md,README.md"` (run via Bash: `. "$CLAUDE_ENG_SHELL_ROOT/.claude/hooks/hookrt.sh"` then the `audit_log` call), the same pattern `/file-directive` etc. use.
+5. **Audit** — the seed commit's bypass is *already* recorded by the `branch` escape's `should_skip` path (this is the load-bearing audit guarantee — never silent). Additionally emit an explicit stage-0 record by sourcing the hook runtime and calling `audit_log info bootstrap-repo seeded "branch=main remote=<origin-url-or-none> files=MISSION.md,README.md"` (run via Bash: `. "$GHJIG_SHELL_ROOT/.claude/hooks/hookrt.sh"` then the `audit_log` call), the same pattern `/file-directive` etc. use.
 
 6. **Publish** — if an `origin` remote exists, `git push -u origin main` (name the branch explicitly; a bare/`HEAD` refspec is not verifiable by the push matcher, SPEC §6.1). GitHub adopts the first pushed branch as the repo default. If no remote, print the manual `git remote add origin <url> && git push -u origin main` follow-up.
 
@@ -68,5 +68,5 @@ The skill's seed commit *is* the documented `branch` escape (audit-logged). No a
 - Running on a repo that already has a default branch / prior commits — step 1 refuses.
 - Using the `branch` escape for anything other than the single seed commit — the exception is scoped to stage-0, not a general bypass.
 - Seeding anything beyond `MISSION.md` + `README.md` — `.github/`, labels, and substrate belong to `/onboard` and `/onboard-dir-mode`.
-- Bypassing the protected-branch gate with either in-command form in-harness — both are stripped before the hook; use the `scripts/eng_skip.sh branch` file token (SPEC §7).
+- Bypassing the protected-branch gate with either in-command form in-harness — both are stripped before the hook; use the `scripts/ghjig_skip.sh branch` file token (SPEC §7).
 - Force-pushing or pushing a bare/`HEAD` refspec — name the branch (`origin main`) explicitly.

@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-SHELL_ROOT="${CLAUDE_ENG_SHELL_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
+SHELL_ROOT="${GHJIG_SHELL_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 [ -n "$SHELL_ROOT" ] && [ -d "$SHELL_ROOT/.claude/hooks/helpers" ] || exit 0
 # Back-fill the env var from self-location (#312) so helpers that reference
-# $CLAUDE_ENG_SHELL_ROOT resolve even when launched with no global env.
-export CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT"
+# $GHJIG_SHELL_ROOT resolve even when launched with no global env.
+export GHJIG_SHELL_ROOT="$SHELL_ROOT"
 
 # Primitive bootstrap of hookrt.sh (audit_log + safe_source). SPEC §6.1.
 hookrt="$SHELL_ROOT/.claude/hooks/hookrt.sh"
 if [ ! -f "$hookrt" ]; then
-  printf '[claude-eng-shell] WARN hookrt-missing: %s not loaded — hook exiting\n' "$hookrt" >&2
+  printf '[GHJig-Claude] WARN hookrt-missing: %s not loaded — hook exiting\n' "$hookrt" >&2
   exit 0
 fi
 # shellcheck source=/dev/null
@@ -39,14 +39,14 @@ case "$tool" in
     # forms (git -c <opt> commit, git -C <path> push, …) still fire the
     # reminders. Single source of truth lives in helpers/git_matcher.sh.
     if printf '%s' "$cmd" | grep -qE "${GIT_PREFIX}commit\b"; then
-      printf '[claude-eng-shell] reminder: update the matching PR body checklist item.\n' >&2
+      printf '[GHJig-Claude] reminder: update the matching PR body checklist item.\n' >&2
     fi
     if printf '%s' "$cmd" | grep -qE "${GIT_PREFIX}push\b"; then
       if command -v gh >/dev/null 2>&1; then
         n=$(gh pr view --json number --jq .number 2>/dev/null)
         if [ -n "$n" ]; then
           state=$(gh pr checks "$n" --json state 2>/dev/null | jq -r '[.[].state] | unique | join(",")' 2>/dev/null)
-          [ -n "$state" ] && printf '[claude-eng-shell] PR #%s checks: %s\n' "$n" "$state" >&2
+          [ -n "$state" ] && printf '[GHJig-Claude] PR #%s checks: %s\n' "$n" "$state" >&2
         fi
       fi
     fi
@@ -61,12 +61,12 @@ case "$tool" in
     off=$(printf '%s' "$input" | jq -r '.tool_input.offset // empty')
     lim=$(printf '%s' "$input" | jq -r '.tool_input.limit // empty')
     if [ -z "$off" ] && [ -z "$lim" ]; then
-      thr="${CLAUDE_ENG_READ_NUDGE_THRESHOLD:-200}"
+      thr="${GHJIG_READ_NUDGE_THRESHOLD:-200}"
       lines=$(wc -l < "$target" 2>/dev/null | tr -d ' ')
       # Fire when the file is large, OR when its size can't be determined (a
       # whole-file load is the worst case, so fail toward nudging).
       if [ -z "$lines" ] || { [ "$lines" -gt "$thr" ]; } 2>/dev/null; then
-        printf '[claude-eng-shell] narrowing: whole-file Read of %s — prefer a targeted `Read --offset/--limit`, or delegate the search to `explorer` (SPEC §1.8).\n' "$target" >&2
+        printf '[GHJig-Claude] narrowing: whole-file Read of %s — prefer a targeted `Read --offset/--limit`, or delegate the search to `explorer` (SPEC §1.8).\n' "$target" >&2
       fi
     fi
     ;;

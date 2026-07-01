@@ -20,7 +20,7 @@ should_skip() {
 }
 
 # _escape_token_honored <category> — consult the per-category file token at
-# $(eng_state_dir)/escape/<cat>.token. Honored ONLY when every guard holds;
+# $(ghjig_state_dir)/escape/<cat>.token. Honored ONLY when every guard holds;
 # any doubt → fail-safe-to-block (return 1). PURE BASH (no python3 → no
 # interpreter-absent failure mode). One-shot: the token is consumed (deleted)
 # on honor AND on any stale/malformed reject (poison cleanup). Bound to the
@@ -31,11 +31,11 @@ should_skip() {
 # (SPEC §6.1: hooks are mistake-prevention, not a security boundary).
 _escape_token_honored() {
   local cat="$1" esd tok bind now
-  esd=$(eng_state_dir 2>/dev/null) || esd=""
-  # Aligned fallback (.claude/eng-state, not .claude/state) — consistent with
-  # eng_state_dir's non-empty form so the no-CLAUDE_PROJECT_DIR case agrees with
+  esd=$(ghjig_state_dir 2>/dev/null) || esd=""
+  # Aligned fallback (.claude/ghjig-state, not .claude/state) — consistent with
+  # ghjig_state_dir's non-empty form so the no-CLAUDE_PROJECT_DIR case agrees with
   # the writer (#483).
-  [ -n "$esd" ] || esd="${CLAUDE_ENG_SHELL_ROOT:-}/.claude/eng-state"
+  [ -n "$esd" ] || esd="${GHJIG_SHELL_ROOT:-}/.claude/ghjig-state"
   [ -n "$esd" ] || return 1
   tok="$esd/escape/${cat}.token"
   [ -r "$tok" ] || return 1   # absent/unreadable → armed (fast path)
@@ -154,7 +154,7 @@ print(json.dumps({"env": env, "cmd": rest}))
 }
 
 # parse_skip_sentinel <raw_cmd> <outvar> — TRAILING-sentinel escape (SPEC §7,
-# #206). Recognizes `# claude-eng:skip=<cat>[,<cat>...] reason=<why>` at the tail
+# #206). Recognizes `# ghjig:skip=<cat>[,<cat>...] reason=<why>` at the tail
 # of the RAW command and, on match, exports SKIP_HOOKS / SKIP_REASON (mirroring
 # parse_env_prefix's contract so every matcher's `should_skip` works unchanged)
 # and writes the sentinel-stripped command to <outvar>. No-op (outvar = input,
@@ -175,7 +175,7 @@ print(json.dumps({"env": env, "cmd": rest}))
 #
 # MUST be called on the RAW command BEFORE the hook's whitespace-normalization
 # + shlex pass, which would quote/mangle the `#`.
-# The `claude-eng:skip=` namespace keeps an ordinary trailing comment from being
+# The `ghjig:skip=` namespace keeps an ordinary trailing comment from being
 # read as an escape; the sentinel is one-shot (it travels with the single
 # command — no persistent bypass state). All `[A-Za-z0-9,_-]` category chars
 # only; the reason is captured verbatim and JSON-encoded by audit_log downstream.
@@ -183,7 +183,7 @@ print(json.dumps({"env": env, "cmd": rest}))
 # COMMENT-TOKEN GUARD (#208): the sentinel is honored ONLY when its `#` is a
 # genuine UNQUOTED shell comment token — a `#` the executed shell itself treats
 # as the start of a comment. A `#` inside a quoted argument (e.g.
-# `gh pr comment 5 --body "x # claude-eng:skip=all reason=y"`) is argument text,
+# `gh pr comment 5 --body "x # ghjig:skip=all reason=y"`) is argument text,
 # not a comment: the shell runs the whole command, so honoring it would let
 # ordinary quoted text (a commit message, a PR-body paste, audit output quoting
 # the sentinel) silently disarm every matcher with a falsified audit reason. The
@@ -195,7 +195,7 @@ parse_skip_sentinel() {
   # Fast path: no namespaced sentinel present anywhere → nothing to honor, and
   # we avoid spawning python3 on the (overwhelmingly common) no-escape command.
   case "$_pss_in" in
-    *'claude-eng:skip='*) : ;;
+    *'ghjig:skip='*) : ;;
     *) printf -v "$_pss_outvar" '%s' "$_pss_in"; return ;;
   esac
   # Comment-token guard: emit the comment suffix (from the first UNQUOTED `#`
@@ -257,7 +257,7 @@ if off >= 0:
   # whose comment suffix spans the newline into a dangerous later line fails this
   # `$`-anchored match (the newline guard is belt-and-suspenders) → not honored,
   # so it can never strip/disarm that later line.
-  local _pss_re='[[:blank:]]*#[[:blank:]]*claude-eng:skip=([A-Za-z0-9,_-]+)([[:blank:]]+reason=([^[:cntrl:]]*))?[[:blank:]]*$'
+  local _pss_re='[[:blank:]]*#[[:blank:]]*ghjig:skip=([A-Za-z0-9,_-]+)([[:blank:]]+reason=([^[:cntrl:]]*))?[[:blank:]]*$'
   if [[ "$_pss_comment" =~ $_pss_re ]] && [[ "${BASH_REMATCH[0]}" != *$'\n'* ]]; then
     # Exact suffix removal (locale-independent). If the comment is not a true
     # suffix of the raw command (e.g. a trailing newline after it that command

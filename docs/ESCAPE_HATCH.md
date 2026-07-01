@@ -11,7 +11,7 @@ Two forms, chosen by **where** the escape is read (full contract: [SPEC.md §7](
 **Trailing sentinel** — the form that survives the **live Claude Code Bash tool** (use this in-harness):
 
 ```bash
-<command>  # claude-eng:skip=<category>[,<category>...] reason=<reason>
+<command>  # ghjig:skip=<category>[,<category>...] reason=<reason>
 ```
 
 The harness consumes a leading `VAR=val` as the spawned subprocess's own environment, so the leading env-prefix below never reaches the hook in-harness (#206); a trailing `#`-comment stays in the command and is ignored by the executed shell. The sentinel's `#` must be a **genuine unquoted comment token** — a `#` inside a quoted argument is argument text, not an escape (#208).

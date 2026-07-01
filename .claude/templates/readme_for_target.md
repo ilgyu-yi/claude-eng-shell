@@ -4,7 +4,7 @@
 
 ## Status
 
-Bootstrapped via `claude-eng-shell` stage-0 (`/bootstrap-repo`). Next: run `/onboard` to check SSOT, `.github/`, permissions, and branch protection.
+Bootstrapped via `GHJig-Claude` stage-0 (`/bootstrap-repo`). Next: run `/onboard` to check SSOT, `.github/`, permissions, and branch protection.
 
 ## Getting started
 

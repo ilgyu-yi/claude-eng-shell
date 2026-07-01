@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-SHELL_ROOT="${CLAUDE_ENG_SHELL_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
+SHELL_ROOT="${GHJIG_SHELL_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 [ -n "$SHELL_ROOT" ] && [ -d "$SHELL_ROOT/.claude/hooks/helpers" ] || exit 0
 # Back-fill the env var from self-location (#312) so helpers that reference
-# $CLAUDE_ENG_SHELL_ROOT resolve even when launched with no global env.
-export CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT"
+# $GHJIG_SHELL_ROOT resolve even when launched with no global env.
+export GHJIG_SHELL_ROOT="$SHELL_ROOT"
 
 # Primitive bootstrap of the hook runtime (SPEC §6.1). hookrt.sh hosts
 # audit_log + safe_source; if absent, stderr-only warn and exit (cannot
 # audit-log the absence of the audit-logger).
 hookrt="$SHELL_ROOT/.claude/hooks/hookrt.sh"
 if [ ! -f "$hookrt" ]; then
-  printf '[claude-eng-shell] WARN hookrt-missing: %s not loaded — hook exiting\n' "$hookrt" >&2
+  printf '[GHJig-Claude] WARN hookrt-missing: %s not loaded — hook exiting\n' "$hookrt" >&2
   exit 0
 fi
 # shellcheck source=/dev/null
@@ -106,7 +106,7 @@ case "$tool" in
     # context — currently extract_commit_subject for the heredoc -m form.
     raw_cmd="$cmd"
 
-    # Parse the SPEC §7 TRAILING-sentinel escape (`# claude-eng:skip=<cat>
+    # Parse the SPEC §7 TRAILING-sentinel escape (`# ghjig:skip=<cat>
     # reason=<why>`) from the RAW command before normalization (#206). This is
     # the in-harness escape: the live Bash tool consumes a leading VAR= prefix
     # (handled by parse_env_prefix below) before it reaches tool_input.command,
@@ -1035,7 +1035,7 @@ case "$tool" in
       lint=$(detect_lint_cmd)
       if [ -n "$lint" ]; then
         if ! run_bounded_lint "$lint" >/dev/null 2>&1; then
-          should_skip format && decided=1 || block format "lint failed or timed out (CLAUDE_ENG_LINT_TIMEOUT=${CLAUDE_ENG_LINT_TIMEOUT:-30}s): $lint"
+          should_skip format && decided=1 || block format "lint failed or timed out (GHJIG_LINT_TIMEOUT=${GHJIG_LINT_TIMEOUT:-30}s): $lint"
         fi
       fi
       # Happy path — all four sub-checks evaluated to no-problem. mark_allow
@@ -1051,7 +1051,7 @@ case "$tool" in
     [ -z "$target" ] && exit 0
 
     # Shell self-modification carve-out (#210): paths under
-    # $CLAUDE_ENG_SHELL_ROOT/ skip the branch + out-of-scope checks (the
+    # $GHJIG_SHELL_ROOT/ skip the branch + out-of-scope checks (the
     # shell legitimately edits its own substrate, which is outside the
     # target repo's branch/registry model). It must NOT early-exit before
     # the sensitive-file check below: writing a .env / *.pem / credentials*

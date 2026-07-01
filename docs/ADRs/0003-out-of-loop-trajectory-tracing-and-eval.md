@@ -14,7 +14,7 @@ Two substrate facts, surveyed, reframe the question away from "build a tracer":
 
 1. **The acting trajectory is already recorded.** The harness emits a per-agent JSONL transcript (under the session `tasks/` directory) — a complete native record of tool calls and decisions — and the shell's own `audit.jsonl` records the enforcement-event slice with a stable schema (`ts / event / category / decision / reason / cwd / source`). Between them, the trajectory substrate largely **already exists**; the shell would be duplicating the harness to build a bespoke tracer.
 
-2. **A golden-task eval consumer already has a seed.** Smoke **§42e** (`CLAUDE_ENG_BEHAVIORAL_SMOKE=1`) already shells out to the live agent with synthetic golden inputs (a minimal-valid Directive body, a section-missing body, a minimal-valid Execution body) and asserts the reviewer's verdict. That is a working — if tiny — golden-task behavioral eval, env-gated and offline-by-default.
+2. **A golden-task eval consumer already has a seed.** Smoke **§42e** (`GHJIG_BEHAVIORAL_SMOKE=1`) already shells out to the live agent with synthetic golden inputs (a minimal-valid Directive body, a section-missing body, a minimal-valid Execution body) and asserts the reviewer's verdict. That is a working — if tiny — golden-task behavioral eval, env-gated and offline-by-default.
 
 ## Decision
 
@@ -44,6 +44,6 @@ Three parts:
 ## Notes
 
 - Spike issue: #425. Gates: issue-reviewer (ship), activation-reviewer (pass).
-- Substrate surveyed: the harness per-agent JSONL transcript (session `tasks/` dir); `.claude/eng-state/audit/audit.jsonl` (schema `ts/event/category/decision/reason/cwd/source`); smoke §42e (`CLAUDE_ENG_BEHAVIORAL_SMOKE=1`, the golden-task eval seed).
+- Substrate surveyed: the harness per-agent JSONL transcript (session `tasks/` dir); `.claude/ghjig-state/audit/audit.jsonl` (schema `ts/event/category/decision/reason/cwd/source`); smoke §42e (`GHJIG_BEHAVIORAL_SMOKE=1`, the golden-task eval seed).
 - Distinct from ADR-0001 (#420): that was a no-go on a silent-fail *sensor* (attribution confound); golden-task eval has known-correct answers and escapes it. Distinct from ADR-0002 (#424): generation-side structured-fill.
 - Related: MISSION "The mechanism" (audit log as deferred positive face; narrowing/injection dual); SPEC §6.0; §9 (don't multiply representations); smoke §42e.

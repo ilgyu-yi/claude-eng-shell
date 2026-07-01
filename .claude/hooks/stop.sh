@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-SHELL_ROOT="${CLAUDE_ENG_SHELL_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
+SHELL_ROOT="${GHJIG_SHELL_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 [ -n "$SHELL_ROOT" ] && [ -d "$SHELL_ROOT/.claude/hooks/helpers" ] || exit 0
 # Back-fill the env var from self-location (#312) so helpers that reference
-# $CLAUDE_ENG_SHELL_ROOT resolve even when launched with no global env.
-export CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT"
+# $GHJIG_SHELL_ROOT resolve even when launched with no global env.
+export GHJIG_SHELL_ROOT="$SHELL_ROOT"
 
 # Primitive bootstrap of hookrt.sh (audit_log + safe_source). SPEC §6.1.
 hookrt="$SHELL_ROOT/.claude/hooks/hookrt.sh"
 if [ ! -f "$hookrt" ]; then
-  printf '[claude-eng-shell] WARN hookrt-missing: %s not loaded — hook exiting\n' "$hookrt" >&2
+  printf '[GHJig-Claude] WARN hookrt-missing: %s not loaded — hook exiting\n' "$hookrt" >&2
   exit 0
 fi
 # shellcheck source=/dev/null
@@ -27,12 +27,12 @@ count=$(cat "$count_file" 2>/dev/null || echo 0)
 count=$((count + 1))
 printf '%s\n' "$count" > "$count_file"
 
-throttle_n=${CLAUDE_ENG_STOP_THROTTLE:-5}
+throttle_n=${GHJIG_STOP_THROTTLE:-5}
 [ $((count % throttle_n)) -ne 0 ] && exit 0
 
 # Suggest /review when uncommitted changes are present.
 if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-  printf '[claude-eng-shell] uncommitted changes present. consider /review.\n' >&2
+  printf '[GHJig-Claude] uncommitted changes present. consider /review.\n' >&2
 fi
 
 # Suggest /sync-pr when HEAD has advanced past the last /sync-pr — i.e. commit(s)
@@ -48,7 +48,7 @@ if [ -n "$pr_n" ]; then
   cached_head=$(pr_cache_head "$pr_n" 2>/dev/null || true)
   cur_head=$(git rev-parse HEAD 2>/dev/null || true)
   if [ -n "$cached_head" ] && [ -n "$cur_head" ] && [ "$cached_head" != "$cur_head" ]; then
-    printf '[claude-eng-shell] commit(s) since last /sync-pr. consider /sync-pr.\n' >&2
+    printf '[GHJig-Claude] commit(s) since last /sync-pr. consider /sync-pr.\n' >&2
   fi
 fi
 

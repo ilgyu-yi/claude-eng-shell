@@ -37,7 +37,7 @@ jobs:
           # still 3.2 (Apple stopped shipping bash 4 over GPLv3). NUL-delimited
           # to survive any future path-with-spaces. See AC #4 in PR #20.
           files=()
-          [ -f bin/claude-eng ] && files+=(bin/claude-eng)
+          [ -f bin/ghjig ] && files+=(bin/ghjig)
           while IFS= read -r -d '' f; do
             files+=("$f")
           done < <(find scripts .claude/hooks -type f -name '*.sh' -print0)

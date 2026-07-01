@@ -14,11 +14,11 @@
 #
 # Bootstrap contract (the primitive every hook uses):
 #
-#   SHELL_ROOT="${CLAUDE_ENG_SHELL_ROOT:-}"
+#   SHELL_ROOT="${GHJIG_SHELL_ROOT:-}"
 #   [ -n "$SHELL_ROOT" ] && [ -d "$SHELL_ROOT/.claude/hooks/helpers" ] || exit 0
 #   hookrt="$SHELL_ROOT/.claude/hooks/hookrt.sh"
 #   if [ ! -f "$hookrt" ]; then
-#     printf '[claude-eng-shell] WARN hookrt-missing: %s not loaded — hook exiting\n' "$hookrt" >&2
+#     printf '[GHJig-Claude] WARN hookrt-missing: %s not loaded — hook exiting\n' "$hookrt" >&2
 #     exit 0
 #   fi
 #   # shellcheck source=/dev/null
@@ -78,36 +78,36 @@ _audit_validate_format() {
   return 0
 }
 
-# eng_state_dir — per-project ephemeral-state base (#314, Directive #311).
-# Resolution (set -u-safe, no external calls): ENG_STATE_DIR_OVERRIDE (test
-# seam) → $CLAUDE_PROJECT_DIR/.claude/eng-state (the hook case — Claude Code
+# ghjig_state_dir — per-project ephemeral-state base (#314, Directive #311).
+# Resolution (set -u-safe, no external calls): GHJIG_STATE_DIR_OVERRIDE (test
+# seam) → $CLAUDE_PROJECT_DIR/.claude/ghjig-state (the hook case — Claude Code
 # guarantees CLAUDE_PROJECT_DIR for hook commands) → empty. Empty means "no
 # per-project context"; callers then fall back to the legacy shared path, so
 # behavior (and existing smoke) is unchanged outside hook context.
-eng_state_dir() {
-  if [ -n "${ENG_STATE_DIR_OVERRIDE:-}" ]; then printf '%s' "$ENG_STATE_DIR_OVERRIDE"; return 0; fi
-  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then printf '%s' "$CLAUDE_PROJECT_DIR/.claude/eng-state"; return 0; fi
+ghjig_state_dir() {
+  if [ -n "${GHJIG_STATE_DIR_OVERRIDE:-}" ]; then printf '%s' "$GHJIG_STATE_DIR_OVERRIDE"; return 0; fi
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then printf '%s' "$CLAUDE_PROJECT_DIR/.claude/ghjig-state"; return 0; fi
   printf ''
 }
 
-# eng_registry_file [project_dir] — per-project scope-guard registry path
+# ghjig_registry_file [project_dir] — per-project scope-guard registry path
 # (#316, Directive #311). One definition, two execution contexts:
-#   - With an explicit <project_dir> (launcher / CLI — bin/claude-eng,
+#   - With an explicit <project_dir> (launcher / CLI — bin/ghjig,
 #     register.sh/inject, self_register, dr_check_registry_guard — where
 #     CLAUDE_PROJECT_DIR is unset because the call precedes the Claude
-#     session): "<project_dir>/.claude/eng-state/registry.txt".
-#   - Argless (hook context — cwd_guard): rides eng_state_dir() →
+#     session): "<project_dir>/.claude/ghjig-state/registry.txt".
+#   - Argless (hook context — cwd_guard): rides ghjig_state_dir() →
 #     "<esd>/registry.txt", else the legacy shared
-#     "${CLAUDE_ENG_SHELL_ROOT:-}/.claude/state/registry.txt".
+#     "${GHJIG_SHELL_ROOT:-}/.claude/state/registry.txt".
 # set -u-safe (every read guarded). A missing file → the caller's
 # `[ -f ]` guard yields out-of-scope → hooks fail-open (transparent),
 # unchanged from the shared-registry era; the move changes only WHICH
 # path is read, never the fail posture.
-eng_registry_file() {
-  if [ -n "${1:-}" ]; then printf '%s' "$1/.claude/eng-state/registry.txt"; return 0; fi
-  local esd; esd=$(eng_state_dir)
+ghjig_registry_file() {
+  if [ -n "${1:-}" ]; then printf '%s' "$1/.claude/ghjig-state/registry.txt"; return 0; fi
+  local esd; esd=$(ghjig_state_dir)
   if [ -n "$esd" ]; then printf '%s' "$esd/registry.txt"; return 0; fi
-  printf '%s' "${CLAUDE_ENG_SHELL_ROOT:-}/.claude/state/registry.txt"
+  printf '%s' "${GHJIG_SHELL_ROOT:-}/.claude/state/registry.txt"
 }
 
 # audit_log <event> <category> <decision> <reason> — append one JSON
@@ -130,10 +130,10 @@ audit_log() {
   # `test`; anything else (unset/empty/smoke/garbage) → `live` (fail-safe-to-
   # live). The marker is set only by the session launcher (e.g. smoke.sh), never
   # reachable by a real Bash-tool action (SPEC §6.1 anti-reclassification / §7).
-  case "${CLAUDE_ENG_AUDIT_SOURCE:-}" in test) _src="test" ;; *) _src="live" ;; esac
+  case "${GHJIG_AUDIT_SOURCE:-}" in test) _src="test" ;; *) _src="live" ;; esac
   # Per-project audit (#314) when in hook context; else legacy shared path.
-  esd=$(eng_state_dir)
-  if [ -n "$esd" ]; then log="$esd/audit/audit.jsonl"; else log="$CLAUDE_ENG_SHELL_ROOT/.claude/audit/audit.jsonl"; fi
+  esd=$(ghjig_state_dir)
+  if [ -n "$esd" ]; then log="$esd/audit/audit.jsonl"; else log="$GHJIG_SHELL_ROOT/.claude/audit/audit.jsonl"; fi
   mkdir -p "$(dirname "$log")"
   local r_reason r_cwd
   r_cwd=$(_audit_json_string "$cwd")
@@ -217,6 +217,6 @@ safe_source() {
   case "$category" in
     secret|branch) sev_suffix=" — NOT ENFORCED (security-relevant)" ;;
   esac
-  audit_log warn "$category" helper-missing "$helper_path not loaded; hook fail-open per SPEC §6.1. Restart claude-eng if a hook-spec change recently introduced this helper.${sev_suffix}"
+  audit_log warn "$category" helper-missing "$helper_path not loaded; hook fail-open per SPEC §6.1. Restart ghjig if a hook-spec change recently introduced this helper.${sev_suffix}"
   return 1
 }

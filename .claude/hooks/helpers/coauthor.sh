@@ -5,7 +5,7 @@
 # Public:
 #   coauthor_trailer — prints the trailer line + newline when enabled,
 #                      empty when disabled. Honors (high → low):
-#                        1. $CLAUDE_ENG_COAUTHOR env (`on` / `off`)
+#                        1. $GHJIG_COAUTHOR env (`on` / `off`)
 #                        2. .claude/state/coauthor per-target file
 #                        3. default `on`
 #
@@ -15,12 +15,12 @@
 
 _coauthor_resolve() {
   local source value
-  if [ -n "${CLAUDE_ENG_COAUTHOR:-}" ]; then
-    source="\$CLAUDE_ENG_COAUTHOR"
-    value="$CLAUDE_ENG_COAUTHOR"
-  elif [ -f "${CLAUDE_ENG_SHELL_ROOT:-}/.claude/state/coauthor" ]; then
+  if [ -n "${GHJIG_COAUTHOR:-}" ]; then
+    source="\$GHJIG_COAUTHOR"
+    value="$GHJIG_COAUTHOR"
+  elif [ -f "${GHJIG_SHELL_ROOT:-}/.claude/state/coauthor" ]; then
     source=".claude/state/coauthor"
-    value=$(tr -d '[:space:]' < "$CLAUDE_ENG_SHELL_ROOT/.claude/state/coauthor")
+    value=$(tr -d '[:space:]' < "$GHJIG_SHELL_ROOT/.claude/state/coauthor")
   else
     printf '%s' "on"
     return

@@ -14,7 +14,7 @@ The MISSION selective-injection half wants relevant material pulled in on demand
 
 **(b) Bound target repos (arbitrary language) — the real case.** For typed/namespaced/overloaded languages (TS, Python, Go, Rust), grep find-refs over-matches badly (same method name across classes, imports vs locals) and go-to-def is genuinely ambiguous — an LSP/AST tool delivers precision grep cannot. So the navigation value is *real* on targets, unlike the bash self-case. **But the boundary bites hardest exactly here:** a shell that installed per-language LSP servers would violate the boundary (global install) and owe an *unbounded* per-language obligation across all bound targets — the load-bearing objection, not a hypothetical. The decisive fact: **targets typically already bring their own code intelligence** (a TS project has `tsserver`, a Python project `pyright`; the harness itself may provide target code navigation), so the need can be met by *consuming* existing tooling rather than the shell *providing* it.
 
-Two further facts: in-boundary index storage exists (`.claude/eng-state/`, gitignored, per-project) — so storage is never the blocker, the binary/server install is; and a bespoke pure-shell symbol helper is possible but marginal even on the bash self-case.
+Two further facts: in-boundary index storage exists (`.claude/ghjig-state/`, gitignored, per-project) — so storage is never the blocker, the binary/server install is; and a bespoke pure-shell symbol helper is possible but marginal even on the bash self-case.
 
 ## Decision
 
@@ -28,7 +28,7 @@ Two further facts: in-boundary index storage exists (`.claude/eng-state/`, gitig
 ## Alternatives considered
 
 - **`bash-language-server` over per-project MCP (`.mcp.json`)** — rejected: `.mcp.json` is in-boundary, but the *server install* (npm/node) is not, the process lifecycle is heavyweight for a non-node repo, and it generalizes badly to varied target languages. Precision gain over word-boundary grep doesn't justify it for bash.
-- **universal-ctags index into `.claude/eng-state/`** — rejected: requires installing universal-ctags (the platform ships only BSD `ctags`, weak on bash); the binary install is the boundary cost. Storage would be clean; the dependency is not.
+- **universal-ctags index into `.claude/ghjig-state/`** — rejected: requires installing universal-ctags (the platform ships only BSD `ctags`, weak on bash); the binary install is the boundary cost. Storage would be clean; the dependency is not.
 - **A pure-shell `symdef`/`symrefs` helper** — boundary-safe and considered seriously, but deferred: marginal gain over the grep one-liner at 91 functions; adds a surface for little benefit. Revisit if the corpus grows or precision pain recurs.
 - **Shell *provides* a single all-language symbol-nav capability** — rejected: the boundary + unbounded-per-language objection. The shell's job is to *use* what a target brings, not to become a polyglot LSP host.
 - **Do nothing, not even document the consume-existing-tooling preference** — rejected: on typed targets grep genuinely degrades, so leaving subagents to default to grep there is a real quality gap; the cheapest mitigation (documenting "prefer the target's/harness's code intelligence on typed targets") is worth taking.
@@ -43,6 +43,6 @@ Two further facts: in-boundary index storage exists (`.claude/eng-state/`, gitig
 ## Notes
 
 - Spike issue: #426. Gates: issue-reviewer (ship), activation-reviewer (pass).
-- Surveyed: 53 `.sh` / ~91 functions; no `.mcp.json`; platform `ctags` is BSD (weak bash support); `.claude/eng-state/` (gitignored, in-boundary) as candidate index storage.
+- Surveyed: 53 `.sh` / ~91 functions; no `.mcp.json`; platform `ctags` is BSD (weak bash support); `.claude/ghjig-state/` (gitignored, in-boundary) as candidate index storage.
 - Distinct from #422/`/recall` (decision record — issues/PRs/ADRs — not code symbols). Distinct from ADR-0002 (#424, generation-side fill) and ADR-0003 (#425, tracing/eval).
 - Related: MISSION "The mechanism" (selective injection — low-noise); MISSION isolation model + CLAUDE.md Boundary (no user-global state); SPEC §6.0 (cost-asymmetry).

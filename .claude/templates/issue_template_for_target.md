@@ -1,4 +1,4 @@
-<!-- Install as .github/ISSUE_TEMPLATE/default.md in the target repo. claude-eng-shell's /onboard suggests this when absent. -->
+<!-- Install as .github/ISSUE_TEMPLATE/default.md in the target repo. GHJig-Claude's /onboard suggests this when absent. -->
 
 ## What
 

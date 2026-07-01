@@ -3,7 +3,7 @@
 # /sync-pr, /ship, /work-on. SPEC §5.4.
 #
 # Cache location: $PR_CACHE_DIR (override; defaults to
-# $CLAUDE_ENG_SHELL_ROOT/.claude/state/pr-cache).
+# $GHJIG_SHELL_ROOT/.claude/state/pr-cache).
 #
 # Filename: <owner>%2F<repo>__pr-<n>.json — '/' URL-encoded as '%2F' so
 # `<owner>/<repo>` slug boundaries survive the filename. Per-PR file holds:
@@ -18,10 +18,10 @@
 #   pr_cache_check <pr_number> <remote_body_sha256>    — exit 0 if absent/match, !=0 + stderr if mismatch
 
 _pr_cache_dir() {
-  local esd; esd=$(eng_state_dir 2>/dev/null || true)   # per-project (#314)
+  local esd; esd=$(ghjig_state_dir 2>/dev/null || true)   # per-project (#314)
   if [ -n "${PR_CACHE_DIR:-}" ]; then printf '%s' "$PR_CACHE_DIR"
   elif [ -n "$esd" ]; then printf '%s' "$esd/pr-cache"
-  else printf '%s' "${CLAUDE_ENG_SHELL_ROOT:-.}/.claude/state/pr-cache"; fi
+  else printf '%s' "${GHJIG_SHELL_ROOT:-.}/.claude/state/pr-cache"; fi
 }
 
 _pr_cache_key() {

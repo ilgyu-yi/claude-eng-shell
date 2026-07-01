@@ -22,7 +22,7 @@ Parse `$ARGUMENTS`: the issue number plus optional `--base <branch>` (default: t
 6. **Reviewer gate** — invoke the `plan-reviewer` subagent (see SPEC §4.8) to **judge the contest {A, B1, B2}**. Pass the base Plan A, the two challenger outputs with their assigned axes, the issue body, and the target MISSION.md. Parse the verdict line (`^VERDICT: (ship|refine|block)`).
    - **`ship`**: proceed to step 7.
    - **`refine: <feedback>`**: re-run the contest with the one-line feedback (re-invoke `planner` and/or re-dispatch the challengers as the feedback indicates), then re-invoke `plan-reviewer`. After two consecutive `refine` verdicts on the latest contest, escalate to the user (or, in unattended mode, treat as `block`).
-   - **`block: <reason>`**: stop and post a `gh issue comment` on the linked issue naming the structural problem. In unattended mode, also append one line to `$CLAUDE_ENG_SHELL_ROOT/.claude/state/plan-block.log`.
+   - **`block: <reason>`**: stop and post a `gh issue comment` on the linked issue naming the structural problem. In unattended mode, also append one line to `$GHJIG_SHELL_ROOT/.claude/state/plan-block.log`.
    - **Reject-audit emission** (SPEC §6.1, Directive #356 signal 3) — on **any** non-pass verdict (`refine` or `block`), emit one categorized audit record: source `hookrt.sh` + `safe_source helpers/reviewer_audit.sh reviewer-reject`, then `reviewer_reject_audit plan-review <reason-class> <issue#>`, mapping the reviewer's reason to the nearest **reason-class** token (`schema-incomplete` / `unverifiable-ac` / `scope-bleed` / `mission-misfit` / `conflict` / `evidence-insufficient`). Observability only — it never changes the verdict's effect.
 7. **Wait for user approval of the plan.** Approval requires an **approach check**: confirm with the user that the winning candidate from the **contest record** (Plan A / B1 / B2 / verdict) is the right one, not just that a plan exists. The approach check is not skipped in Auto / unattended mode. **In `unattended` mode, a clean `plan-reviewer` verdict from step 6 counts as approval** — no human is present, and the reviewer is the substitute.
 8. Once approved, **write Phase A (Doc) and make it the first commit on the branch.** Never open the PR with an empty seed commit.
@@ -38,7 +38,7 @@ Parse `$ARGUMENTS`: the issue number plus optional `--base <branch>` (default: t
    # and conditionally include the line — the `${COAUTHOR:+…}` expansion
    # injects the leading blank line ONLY when the trailer is enabled, so
    # `off` users don't get a trailing blank in the commit message.
-   . "$CLAUDE_ENG_SHELL_ROOT/.claude/hooks/helpers/coauthor.sh"
+   . "$GHJIG_SHELL_ROOT/.claude/hooks/helpers/coauthor.sh"
    COAUTHOR=$(coauthor_trailer)
    git commit -m "<type>(#<#>): <subject>
 
@@ -50,7 +50,7 @@ Parse `$ARGUMENTS`: the issue number plus optional `--base <branch>` (default: t
    ```
    `Closes` vs `Refs` — the rule above is the default; the user may override on split (intermediate PR → `Refs`, final consolidator → `Closes`).
 
-   **Recommended assembly path** (SPEC §10.2, ADR-0002): instead of hand-rolling the `git commit -m` above, source `helpers/eng_commit.sh` and call `eng_commit <type> <#> "<subject>" "<body-para>" "${TRAILER}"` — it validates the assembled `<type>(#<#>): <subject>` via `check_commit_subject` *before* committing and builds the message as a bash argv array (multibyte/multi-paragraph bodies round-trip cleanly; the `commit-format` hook sees and accepts the first-`-m` subject). `eng_commit` appends the Co-Authored-By trailer itself when enabled, so pass body paragraphs + the `Closes`/`Refs` trailer as args. Offered, not mandatory — the hand-roll above remains valid.
+   **Recommended assembly path** (SPEC §10.2, ADR-0002): instead of hand-rolling the `git commit -m` above, source `helpers/ghjig_commit.sh` and call `ghjig_commit <type> <#> "<subject>" "<body-para>" "${TRAILER}"` — it validates the assembled `<type>(#<#>): <subject>` via `check_commit_subject` *before* committing and builds the message as a bash argv array (multibyte/multi-paragraph bodies round-trip cleanly; the `commit-format` hook sees and accepts the first-`-m` subject). `ghjig_commit` appends the Co-Authored-By trailer itself when enabled, so pass body paragraphs + the `Closes`/`Refs` trailer as args. Offered, not mandatory — the hand-roll above remains valid.
 
    If Phase A isn't ready to commit (e.g. planner output needs more clarification), **defer the PR** — keep the issue + plan in conversation. Don't fall back to an empty seed commit just to open the draft PR; see SPEC §5.3.
 9. Print "ready to start" message. Continue with the next phase (Test).

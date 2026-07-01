@@ -16,7 +16,7 @@
 #   2 — gh not authenticated
 #   3 — gh token missing 'project' scope
 #   4 — gh repo view failed (no GitHub remote, or owner unresolvable)
-#   5 — No Project named "<repo-name> roadmap" (or $CLAUDE_ENG_PROJECT_NAME) for owner
+#   5 — No Project named "<repo-name> roadmap" (or $GHJIG_PROJECT_NAME) for owner
 #   6 — jq missing
 #
 # All non-zero exits emit a one-line diagnostic to stderr and an audit_log entry
@@ -26,12 +26,12 @@ set -uo pipefail
 
 # ---------- environment ----------
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-: "${CLAUDE_ENG_SHELL_ROOT:=$SCRIPT_ROOT}"
-export CLAUDE_ENG_SHELL_ROOT
+: "${GHJIG_SHELL_ROOT:=$SCRIPT_ROOT}"
+export GHJIG_SHELL_ROOT
 
-if [ -f "$CLAUDE_ENG_SHELL_ROOT/.claude/hooks/hookrt.sh" ]; then
+if [ -f "$GHJIG_SHELL_ROOT/.claude/hooks/hookrt.sh" ]; then
   # shellcheck source=/dev/null
-  . "$CLAUDE_ENG_SHELL_ROOT/.claude/hooks/hookrt.sh"
+  . "$GHJIG_SHELL_ROOT/.claude/hooks/hookrt.sh"
 else
   audit_log() { :; }
 fi
@@ -42,7 +42,7 @@ DR_SCRIPT_NAME=dir_mode_project
 # shellcheck disable=SC2034  # used by sourced dir_mode_project_resolve.sh
 DR_AUDIT_CATEGORY=project-resolve
 # shellcheck source=/dev/null
-. "$CLAUDE_ENG_SHELL_ROOT/scripts/lib/dir_mode_project_resolve.sh"
+. "$GHJIG_SHELL_ROOT/scripts/lib/dir_mode_project_resolve.sh"
 
 verb="${1:-}"
 case "$verb" in

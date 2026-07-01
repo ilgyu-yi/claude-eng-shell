@@ -1,6 +1,6 @@
-# claude-eng-shell — Operating Norms
+# GHJig-Claude — Operating Norms
 
-This directory holds shell assets injected by claude-eng-shell. This file is a summary of the work norms the shell enforces. Full spec is in the shell repo's `SPEC.md` — consult its **Table of contents** at the top first, then `Read --offset --limit` the targeted section rather than loading the whole 73KB file. Regenerate the TOC via `scripts/build_toc.sh` after editing any SPEC heading.
+This directory holds shell assets injected by GHJig-Claude. This file is a summary of the work norms the shell enforces. Full spec is in the shell repo's `SPEC.md` — consult its **Table of contents** at the top first, then `Read --offset --limit` the targeted section rather than loading the whole 73KB file. Regenerate the TOC via `scripts/build_toc.sh` after editing any SPEC heading.
 
 ## Backbone: GitHub standard flow
 issue → branch → draft PR → checklist commits → ready PR → merge. Every change rides this flow. No fork (upstream-only).
@@ -12,7 +12,7 @@ PR-ready is the autonomy ceiling **by default** (`attended` mode). The `unattend
 An optional **Initiative** tier sits above Directives: a planning artifact the shell **consumes, not authors** (`/consume-initiative` extracts Directives from it; `/initiative-feedback` posts comments back). Initiative Issues are read-only to the shell — see SPEC §1.7 for the full `Initiative → Directive → Execution` hierarchy and the three initiative matchers (`label-parent-consistency` mutual-exclusivity + parent-XOR, `initiative-readonly`) in §6.1.
 
 ## Communication language vs work language
-The conversation with the human (**communication language**) and the language of durable repo artifacts (**work language**) are separate channels (SPEC §5.7.2, Directive #322). Chat replies stay in the user's language; **all durable artifacts** — commit messages, PR titles/bodies, issue/directive/execution bodies, acceptance criteria, changelog fragments, shell-authored code comments, audit `reason` text — are authored in the **work language**, resolved by `resolve_work_lang` (`.claude/hooks/helpers/work_lang.sh`): `$CLAUDE_ENG_WORK_LANG` → `.claude/state/work-lang` (cwd-relative) → default `en`. Any language code is accepted (not ko/en-hardcoded). **Before authoring any artifact** (after the conversation concludes), recast the task context into the work language and write every work-language surface from that recast — do not transliterate the chat. Unset → `en` (today's behavior).
+The conversation with the human (**communication language**) and the language of durable repo artifacts (**work language**) are separate channels (SPEC §5.7.2, Directive #322). Chat replies stay in the user's language; **all durable artifacts** — commit messages, PR titles/bodies, issue/directive/execution bodies, acceptance criteria, changelog fragments, shell-authored code comments, audit `reason` text — are authored in the **work language**, resolved by `resolve_work_lang` (`.claude/hooks/helpers/work_lang.sh`): `$GHJIG_WORK_LANG` → `.claude/state/work-lang` (cwd-relative) → default `en`. Any language code is accepted (not ko/en-hardcoded). **Before authoring any artifact** (after the conversation concludes), recast the task context into the work language and write every work-language surface from that recast — do not transliterate the chat. Unset → `en` (today's behavior).
 
 ## Work order: Doc → Test → Code
 1. **Doc** — Write the behavior/contract to be changed into the SSOT (MISSION, README, CLAUDE.md, ARCHITECTURE, ADR) first.
@@ -67,7 +67,7 @@ Don't re-run an exploration in `explorer` that the main assistant already did.
 - Required group (`feat`/`fix`/`docs`/`refactor`/`perf`) — issue # required
 - Optional group (`test`/`style`/`build`/`ci`/`chore`/`revert`) — issue # optional
 - `Closes #N` (single/final PR), `Refs #N` (intermediate PR)
-- Recommended: assemble the commit via `eng_commit <type> <issue> "<subject>" [body…]` (`helpers/eng_commit.sh`, SPEC §10.2) — validates the subject before committing + array-argv build avoids multibyte/multiline `-m` pitfalls. Offered, not forced; the commit-format hook stays the net.
+- Recommended: assemble the commit via `ghjig_commit <type> <issue> "<subject>" [body…]` (`helpers/ghjig_commit.sh`, SPEC §10.2) — validates the subject before committing + array-argv build avoids multibyte/multiline `-m` pitfalls. Offered, not forced; the commit-format hook stays the net.
 
 ## What hooks enforce
 Pointer index — every contract below lives in full in SPEC §6.1 (PreToolUse matcher table + `safe_source` fail-policy table), with the binding/state/banner items in §3.2.1, §3.2.2, and §6.5(c). Enforcement-style face (negative block vs positive guide) is chosen by cost-asymmetry — SPEC §6.0.
@@ -78,10 +78,10 @@ Pointer index — every contract below lives in full in SPEC §6.1 (PreToolUse m
 - **ac-closeout** — `gh pr merge` blocked when a linked issue has unchecked AC items and no `## AC closeout` marker comment yet (SPEC §6.1).
 - **merge-strategy** — `gh pr merge` to the default branch blocked unless the strategy is `--merge` (SPEC §6.1, §5.7.1).
 - **sensitive-file** — Edit/Write on `.env`, `*.pem`, `credentials*`, `id_rsa*`, `id_ed25519*` blocked, including under both carve-outs (SPEC §6.1).
-- **out-of-scope (Edit/Write)** — Edit/Write outside the registry blocked, except the two carve-outs `$CLAUDE_ENG_SHELL_ROOT/` and `$HOME/.claude/` (SPEC §6.1).
+- **out-of-scope (Edit/Write)** — Edit/Write outside the registry blocked, except the two carve-outs `$GHJIG_SHELL_ROOT/` and `$HOME/.claude/` (SPEC §6.1).
 - **out-of-scope (destructive)** — `rm`/`mv`/`cp` with a force/recursive flag in any surface form and out-of-registry args blocked; no carve-out (SPEC §6.1).
-- **shell-root resolution** — hooks resolve the shell via `$CLAUDE_ENG_SHELL_ROOT` else self-locate through the per-project `.claude/eng-shell-root` binding symlink, so a plain `claude` in a target needs no global env (SPEC §3.2.1).
-- **per-project state** — audit log, caches, and the scope-guard registry resolve per-project under `eng-state/` (`eng_state_dir`/`eng_registry_file`); missing/empty registry fails open (SPEC §3.2.2).
+- **shell-root resolution** — hooks resolve the shell via `$GHJIG_SHELL_ROOT` else self-locate through the per-project `.claude/ghjig-shell-root` binding symlink, so a plain `claude` in a target needs no global env (SPEC §3.2.1).
+- **per-project state** — audit log, caches, and the scope-guard registry resolve per-project under `ghjig-state/` (`ghjig_state_dir`/`ghjig_registry_file`); missing/empty registry fails open (SPEC §3.2.2).
 - **SessionStart banner** — surfaces the detectable silent-no-op states (runtime `hookrt.sh` missing; and a present-but-empty scope registry that silently disarms enforcement, #502) via a once-per-session banner naming the fix (SPEC §6.5(c)).
 - **safe_source** — every helper source (hook-to-helper and helper-to-helper) goes through `safe_source`, fail-open with `audit_log warn <category> helper-missing` on miss (SPEC §6.1 fail-policy table).
 - **pass-through invariant** — every matcher reaches a decided state per fire; happy paths `mark_allow` silently, anomalous silent fall-through is caught by `pass_through_trace` (SPEC §6.1).
@@ -92,7 +92,7 @@ Pointer index — every contract below lives in full in SPEC §6.1 (PreToolUse m
 - **initiative-readonly** — blocks mutating `gh issue edit`/`close`/`reopen` on an `initiative` Issue (comments always allowed) (SPEC §6.1).
 - **directive-close** — blocks a GitHub close keyword + Directive `#N` in a PR body (inline `--body`) or commit message; the auto-close would bypass `/complete-directive` (§5.13). Execution Issues unaffected; per-`#N` fail-open (SPEC §6.1).
 
-Escape — three audit-logged forms. The **primary in-agent** form is a **file-based skip token** (`scripts/eng_skip.sh <cat> <cmd_fingerprint> [reason]`, one-shot + 60s TTL, read by the hook at fire time so the harness can't strip it). The two in-command forms — a trailing `# claude-eng:skip=<cat> reason=<why>` sentinel and a leading `SKIP_HOOKS=<cat> SKIP_REASON='<why>'` env-prefix — are **verbatim-delivery only** (a real shell, the smoke harness); the live Claude Code Bash tool strips both before the hook, so neither lands in-harness. Real terminal / non-protected-branch + rename is the fallback. Full contract: SPEC §7.
+Escape — three audit-logged forms. The **primary in-agent** form is a **file-based skip token** (`scripts/ghjig_skip.sh <cat> <cmd_fingerprint> [reason]`, one-shot + 60s TTL, read by the hook at fire time so the harness can't strip it). The two in-command forms — a trailing `# ghjig:skip=<cat> reason=<why>` sentinel and a leading `SKIP_HOOKS=<cat> SKIP_REASON='<why>'` env-prefix — are **verbatim-delivery only** (a real shell, the smoke harness); the live Claude Code Bash tool strips both before the hook, so neither lands in-harness. Real terminal / non-protected-branch + rename is the fallback. Full contract: SPEC §7.
 
 ## Boundary
 - The shell never touches user-global state (`~/.zshrc`, `~/.claude`, global git config, etc.).

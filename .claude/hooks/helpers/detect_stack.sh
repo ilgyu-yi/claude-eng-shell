@@ -79,14 +79,14 @@ _lint_timeout_warned=0
 
 # run_bounded_lint <cmd>
 #   Runs <cmd> via timeout(1) (or gtimeout(1) on macOS) bounded by
-#   CLAUDE_ENG_LINT_TIMEOUT seconds (default 30). Returns the command's
+#   GHJIG_LINT_TIMEOUT seconds (default 30). Returns the command's
 #   exit code, or the timeout exit (typically 124) when the bound fires.
 #   If neither timeout binary is on PATH, emits an audit_log warn once
 #   per process and falls back to unbounded execution — better to surface
 #   the missing dep than to silently disable enforcement or hang.
 run_bounded_lint() {
   local cmd="$1"
-  local secs="${CLAUDE_ENG_LINT_TIMEOUT:-30}"
+  local secs="${GHJIG_LINT_TIMEOUT:-30}"
   local timeout_bin=""
   if command -v timeout >/dev/null 2>&1; then
     timeout_bin=timeout

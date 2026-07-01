@@ -28,7 +28,7 @@ name: issues-to-project-mirror
 # remain authoritative. A `mirror-stale-warn` audit category is reserved
 # in SPEC §2.1 for future monitoring (brief §7 deferred to v1+).
 #
-# Repo target: $CLAUDE_ENG_PROJECT_NAME (default: "<repo-name> roadmap")
+# Repo target: $GHJIG_PROJECT_NAME (default: "<repo-name> roadmap")
 # under the repo owner. The workflow resolves these via `gh repo view` +
 # `gh project list`, matching the substrate-guard pattern from issue #71.
 
@@ -57,10 +57,10 @@ jobs:
           set -euo pipefail
 
           # Resolve owner + repo from the workflow env. Project name:
-          # "<repo-name> roadmap" by default; CLAUDE_ENG_PROJECT_NAME override.
+          # "<repo-name> roadmap" by default; GHJIG_PROJECT_NAME override.
           owner="${REPO%/*}"
           repo_name="${REPO#*/}"
-          project_name="${CLAUDE_ENG_PROJECT_NAME:-$repo_name roadmap}"
+          project_name="${GHJIG_PROJECT_NAME:-$repo_name roadmap}"
 
           # Find the Project by name. If absent, no-op (graceful: this repo
           # may not have a Project set up; mirror is best-effort).

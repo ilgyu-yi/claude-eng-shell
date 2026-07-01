@@ -7,28 +7,28 @@ set -uo pipefail
 # env is back-filled below — so the old banner only false-fired. The residual
 # genuine no-op (binding symlink missing/broken) is structurally undetectable
 # here: this hook is itself invoked through that binding
-# (${CLAUDE_PROJECT_DIR}/.claude/eng-shell-root/...), so a broken binding means
+# (${CLAUDE_PROJECT_DIR}/.claude/ghjig-shell-root/...), so a broken binding means
 # this script never runs. See SPEC §6.5(c). The hookrt-missing banner below stays.
 
-SHELL_ROOT="${CLAUDE_ENG_SHELL_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
+SHELL_ROOT="${GHJIG_SHELL_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 [ -n "$SHELL_ROOT" ] && [ -d "$SHELL_ROOT/.claude/hooks/helpers" ] || exit 0
 # Back-fill the env var from self-location (#312) so helpers that reference
-# $CLAUDE_ENG_SHELL_ROOT resolve even when launched with no global env.
-export CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT"
+# $GHJIG_SHELL_ROOT resolve even when launched with no global env.
+export GHJIG_SHELL_ROOT="$SHELL_ROOT"
 
 # Primitive bootstrap of hookrt.sh (audit_log + safe_source). SPEC §6.1.
 hookrt="$SHELL_ROOT/.claude/hooks/hookrt.sh"
 if [ ! -f "$hookrt" ]; then
   # Per-invocation diagnostic floor (stable contract for log scrapers).
-  printf '[claude-eng-shell] WARN hookrt-missing: %s not loaded — hook exiting\n' "$hookrt" >&2
+  printf '[GHJig-Claude] WARN hookrt-missing: %s not loaded — hook exiting\n' "$hookrt" >&2
   # Once-per-session actionable banner (SPEC §6.5(c)). Same primitive-inline-
   # printf + mkdir-stamp debounce pattern as the inject-consistency banner.
   # Distinct stamp suffix `-hookrt` avoids collision. If mkdir fails (hostile
   # $TMPDIR / low-disk), the banner is suppressed; the per-fire WARN above is
   # the diagnostic floor that survives that failure mode.
-  _hookrt_stamp="${TMPDIR:-/tmp}/claude-eng-banner-hookrt.${CLAUDE_SESSION_ID:-$PPID}"
+  _hookrt_stamp="${TMPDIR:-/tmp}/ghjig-banner-hookrt.${CLAUDE_SESSION_ID:-$PPID}"
   if [ ! -d "$_hookrt_stamp" ] && mkdir "$_hookrt_stamp" 2>/dev/null; then
-    printf '[claude-eng-shell] WARN hookrt-missing: hook enforcement OFF until restored. Fix: `git -C %s status` to inspect tree state, then `git -C %s checkout -- .claude/hooks/hookrt.sh` to restore.\n' \
+    printf '[GHJig-Claude] WARN hookrt-missing: hook enforcement OFF until restored. Fix: `git -C %s status` to inspect tree state, then `git -C %s checkout -- .claude/hooks/hookrt.sh` to restore.\n' \
       "$SHELL_ROOT" "$SHELL_ROOT" >&2
   fi
   exit 0
@@ -54,12 +54,12 @@ safe_source "$SHELL_ROOT/scripts/lib/audit_log_path.sh"          friction-adviso
 # once-per-session banner (debounced) + audit warn, mirroring the hookrt banner.
 # (The binding-symlink-repoint disable stays a documented residual — SPEC §6.5(c)
 #  — because this detector is itself reached THROUGH the binding.)
-_ce_reg=$(eng_registry_file 2>/dev/null || true)
+_ce_reg=$(ghjig_registry_file 2>/dev/null || true)
 if [ -n "$_ce_reg" ] && [ -f "$_ce_reg" ] && ! grep -q '[^[:space:]]' "$_ce_reg" 2>/dev/null; then
   # Banner FIRST (the user-visible AC5 signal), debounced once per session.
-  _reg_stamp="${TMPDIR:-/tmp}/claude-eng-banner-regzero.${CLAUDE_SESSION_ID:-$PPID}"
+  _reg_stamp="${TMPDIR:-/tmp}/ghjig-banner-regzero.${CLAUDE_SESSION_ID:-$PPID}"
   if [ ! -d "$_reg_stamp" ] && mkdir "$_reg_stamp" 2>/dev/null; then
-    printf '[claude-eng-shell] WARN registry-zeroed: scope-guard registry %s is EMPTY — hook enforcement is OFF (fails open on an empty registry). Fix: re-register this project (`scripts/register.sh`) or `git`-restore the registry, then restart the session.\n' "$_ce_reg" >&2
+    printf '[GHJig-Claude] WARN registry-zeroed: scope-guard registry %s is EMPTY — hook enforcement is OFF (fails open on an empty registry). Fix: re-register this project (`scripts/register.sh`) or `git`-restore the registry, then restart the session.\n' "$_ce_reg" >&2
   fi
   # Audit record in a SUBSHELL so any audit_log misbehavior (e.g. a `set -u`
   # abort on an unusual env) cannot kill this hook before/after the banner.
@@ -112,7 +112,7 @@ if command -v git >/dev/null 2>&1; then
     # `behind` reads local refs (possibly up to TTL stale by design).
     behind=$(cd "$SHELL_ROOT" && git rev-list --count "HEAD..@{u}" 2>/dev/null || echo 0)
     if [ "${behind:-0}" -gt 0 ]; then
-      printf '[claude-eng-shell] shell repo is %s commit(s) behind origin. consider pulling.\n' "$behind"
+      printf '[GHJig-Claude] shell repo is %s commit(s) behind origin. consider pulling.\n' "$behind"
     fi
   fi
 fi
@@ -128,7 +128,7 @@ _session_friction_advisory() {
   command -v resolve_audit_log >/dev/null 2>&1 || return 0
 
   local esd stamp ttl
-  esd=$(eng_state_dir 2>/dev/null || true)
+  esd=$(ghjig_state_dir 2>/dev/null || true)
   stamp="${esd:+$esd/last-friction-surfaced}"
   [ -n "$stamp" ] || stamp="$SHELL_ROOT/.claude/state/last-friction-surfaced"
   ttl="${SESSION_START_FRICTION_TTL:-21600}"
@@ -183,7 +183,7 @@ _session_friction_advisory() {
   case "$parks" in ""|*[!0-9]*) parks=0 ;; esac
 
   if [ "$hits" -eq 1 ] || [ "$parks" -gt 0 ]; then
-    local msg="[claude-eng-shell] friction advisory: accumulated friction detected"
+    local msg="[GHJig-Claude] friction advisory: accumulated friction detected"
     [ "$parks" -gt 0 ] && msg="$msg (${parks} unattended park record(s))"
     [ "$sd_count" -gt 0 ] && msg="$msg (${sd_count} spec-drift candidate(s))"
     msg="$msg — review via /audit or scripts/narrowing_candidates.sh + scripts/promotion_candidates.sh + scripts/ceremony_candidates.sh + scripts/spec_drift_candidates.sh"
@@ -203,7 +203,7 @@ command -v git >/dev/null 2>&1 || exit 0
 
 branch=$(current_branch)
 [ -z "$branch" ] && exit 0
-printf '[claude-eng-shell] branch: %s\n' "$branch"
+printf '[GHJig-Claude] branch: %s\n' "$branch"
 
 # 2.5) SSOT-presence health line (SPEC §6.5(e), #460, Directive #454).
 # Once-per-session (this hook fires once per session), zero-network glance at the
@@ -217,10 +217,10 @@ if [ -f "$_ssot_checks" ]; then
   _ssot_spec=$(printf '%s\n' "$_ssot_out" | awk '$1=="ssot:SPEC.md"{print $2; exit}')
   _ssot_mission=$(printf '%s\n' "$_ssot_out" | awk '$1=="ssot:MISSION.md"{print $2; exit}')
   if [ "$_ssot_spec" = fail ]; then
-    printf '[claude-eng-shell] SSOT-nudge: SPEC.md absent — SPEC is the required behavioural SSOT (SPEC §1.3); author it before other work (scaffold: .claude/templates/spec.md).\n'
+    printf '[GHJig-Claude] SSOT-nudge: SPEC.md absent — SPEC is the required behavioural SSOT (SPEC §1.3); author it before other work (scaffold: .claude/templates/spec.md).\n'
   elif [ "$_ssot_spec" = ok ]; then
     _ssot_mg='✗'; [ "$_ssot_mission" = ok ] && _ssot_mg='✓'
-    printf '[claude-eng-shell] SSOT: MISSION.md %s SPEC.md ✓\n' "$_ssot_mg"
+    printf '[GHJig-Claude] SSOT: MISSION.md %s SPEC.md ✓\n' "$_ssot_mg"
   fi
 fi
 

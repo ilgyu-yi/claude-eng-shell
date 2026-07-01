@@ -41,7 +41,7 @@ Consume the fragment-contract substrate (SPEC §18) and produce a release PR. Th
 8. **Branch + commit** — create `release/X.Y.Z`, write the `branch`-category file-based skip token, then commit the staged diff:
    ```bash
    git checkout -b release/<X.Y.Z>
-   scripts/eng_skip.sh branch 'chore: release <X.Y.Z>' '/release branch commit'
+   scripts/ghjig_skip.sh branch 'chore: release <X.Y.Z>' '/release branch commit'
    git commit -m "chore: release <X.Y.Z>" -m "Consolidated $(N) fragments. See CHANGELOG.md ## [<X.Y.Z>]."
    ```
    The token's fingerprint is the **commit subject** `chore: release <X.Y.Z>` (high-entropy, distinguishing — SPEC §7). The hook reads it at fire time, audits it, and consumes it. The in-harness-inert leading form `SKIP_HOOKS=branch SKIP_REASON='/release branch commit' git commit …` remains the **verbatim-shell** equivalent for a real terminal, but does **not** disarm the matcher in-harness (it is stripped before the hook).
@@ -82,7 +82,7 @@ git pull --ff-only
 MERGE_SHA=$(git rev-parse HEAD)
 awk '/^## \[<X.Y.Z>\]/{f=1; next} /^## \[/{f=0} f' CHANGELOG.md > /tmp/release-notes-v<X.Y.Z>.md
 gh release create v<X.Y.Z> --title v<X.Y.Z> --target "$MERGE_SHA" --notes-file /tmp/release-notes-v<X.Y.Z>.md
-"$CLAUDE_ENG_SHELL_ROOT/scripts/release_verify.sh" <X.Y.Z>   # confirms the tag + Release-with-notes landed
+"$GHJIG_SHELL_ROOT/scripts/release_verify.sh" <X.Y.Z>   # confirms the tag + Release-with-notes landed
 ```
 
 **No `--verify-tag`** (#448): that flag *aborts* `gh release create` unless the tag already exists, but the tag and Release are created **together** here (the tag is made from `--target`), so `--verify-tag` would always abort on a fresh release. Omitting it lets `gh release create` make both.
@@ -100,7 +100,7 @@ Re-running `gh release create` on an existing tag fails with a clear `release al
 
 ## Escapes
 
-- `scripts/eng_skip.sh branch 'chore: release <X.Y.Z>' '/release branch commit'` — the `branch` file-based skip token (SPEC §7), structurally required for step 8 (the one purposeful commit on the `release/X.Y.Z` branch). Audit-logged + consumed on read. Reuse outside `/release` invocations is a smell — `/audit` should filter on the documented reason string. (The leading `SKIP_HOOKS=branch SKIP_REASON='/release branch commit'` form is the verbatim-shell equivalent for a real terminal; it does not land in-harness.)
+- `scripts/ghjig_skip.sh branch 'chore: release <X.Y.Z>' '/release branch commit'` — the `branch` file-based skip token (SPEC §7), structurally required for step 8 (the one purposeful commit on the `release/X.Y.Z` branch). Audit-logged + consumed on read. Reuse outside `/release` invocations is a smell — `/audit` should filter on the documented reason string. (The leading `SKIP_HOOKS=branch SKIP_REASON='/release branch commit'` form is the verbatim-shell equivalent for a real terminal; it does not land in-harness.)
 - `SKIP_HOOKS=release-review SKIP_REASON='<why>'` — bypass the reviewer gate at step 9. Audit-logged.
 
 ## Forbidden

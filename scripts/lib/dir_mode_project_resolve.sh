@@ -24,7 +24,7 @@
 # Parent scripts MUST set, before sourcing:
 #   DR_SCRIPT_NAME       — string used in stderr prefixes (e.g. "setup_project").
 #   DR_AUDIT_CATEGORY    — audit_log category (e.g. "project-setup" / "project-resolve").
-#   CLAUDE_ENG_SHELL_ROOT — shell root (for registry path).
+#   GHJIG_SHELL_ROOT — shell root (for registry path).
 # Parent scripts MUST have audit_log available (sourced from hookrt.sh or stubbed
 # as a no-op).
 
@@ -41,23 +41,23 @@ dr_check_registry_guard() {
   local target registry
   target=$(pwd -P)
   # Per-project registry (#316), explicit-arg = CLI context (no CLAUDE_PROJECT_DIR);
-  # discovery key is "does cwd carry its own eng-state/registry.txt?". Parents source
+  # discovery key is "does cwd carry its own ghjig-state/registry.txt?". Parents source
   # hookrt; defensively source from the code root if the resolver is somehow absent.
-  command -v eng_registry_file >/dev/null 2>&1 \
-    || { [ -n "${CLAUDE_ENG_SHELL_ROOT:-}" ] && [ -f "$CLAUDE_ENG_SHELL_ROOT/.claude/hooks/hookrt.sh" ] \
-         && . "$CLAUDE_ENG_SHELL_ROOT/.claude/hooks/hookrt.sh"; }
-  registry=$(eng_registry_file "$target")
+  command -v ghjig_registry_file >/dev/null 2>&1 \
+    || { [ -n "${GHJIG_SHELL_ROOT:-}" ] && [ -f "$GHJIG_SHELL_ROOT/.claude/hooks/hookrt.sh" ] \
+         && . "$GHJIG_SHELL_ROOT/.claude/hooks/hookrt.sh"; }
+  registry=$(ghjig_registry_file "$target")
   # Back-compat (#316, Directive #311 "existing setups keep working"): a target
   # registered before #316 lives only in the legacy shared registry. Accept either
   # the per-project registry OR the legacy shared one (read-only floor; new
   # registrations still write per-project, so write-isolation is preserved).
-  local legacy="${CLAUDE_ENG_SHELL_ROOT:-}/.claude/state/registry.txt"
+  local legacy="${GHJIG_SHELL_ROOT:-}/.claude/state/registry.txt"
   if { [ -f "$registry" ] && grep -qxF "$target" "$registry"; } \
      || { [ -f "$legacy" ] && grep -qxF "$target" "$legacy"; }; then
     return 0
   fi
   echo "$DR_SCRIPT_NAME: refusing — '$target' is not a registered target" >&2
-  echo "  Register first: $CLAUDE_ENG_SHELL_ROOT/scripts/register.sh '$target'" >&2
+  echo "  Register first: $GHJIG_SHELL_ROOT/scripts/register.sh '$target'" >&2
   audit_log block "$DR_AUDIT_CATEGORY" deny "unregistered-path: $target" 2>/dev/null || true
   return 1
 }
@@ -107,7 +107,7 @@ dr_resolve_owner_repo() {
   }
   DR_OWNER=$(printf '%s' "$repo_json" | jq -r '.owner.login')
   DR_REPO_NAME=$(printf '%s' "$repo_json" | jq -r '.name')
-  DR_PROJECT_NAME="${CLAUDE_ENG_PROJECT_NAME:-$DR_REPO_NAME roadmap}"
+  DR_PROJECT_NAME="${GHJIG_PROJECT_NAME:-$DR_REPO_NAME roadmap}"
   if [ -z "$DR_OWNER" ] || [ "$DR_OWNER" = null ]; then
     echo "$DR_SCRIPT_NAME: could not resolve repo owner from gh repo view" >&2
     audit_log block "$DR_AUDIT_CATEGORY" deny "owner-unresolved" 2>/dev/null || true
