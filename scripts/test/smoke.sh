@@ -13192,7 +13192,7 @@ fi
 
 # ---------- §133: GHJig-Claude identity guard (#533) ----------
 # Assert ZERO legacy identity identifiers survive in tracked code+prose after the
-# GHJig-Claude -> GHJig-Claude rename. Every forbidden token below is built
+# rename to GHJig-Claude. Every forbidden token below is built
 # from string fragments ("A""B") so this guard's OWN source carries no literal
 # legacy token to self-match — the same anti-vacuity discipline as the head
 # comment, and it also keeps the Code-phase sed from rewriting the guard's
