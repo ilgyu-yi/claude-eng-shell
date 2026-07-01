@@ -12900,12 +12900,21 @@ else
   # arm (b): CLAUDE.md recall-routing norm token + the thin SPEC §5.25 pointer.
   s129_norm=$(grep -ciE 'recall routing|recall-shaped' "$S129_CLAUDE" 2>/dev/null | tr -d ' ')
   s129_ptr=$(grep -ciE 'SPEC §5\.25' "$S129_CLAUDE" 2>/dev/null | tr -d ' ')
+  # arm (c): #528 — the description carries the empty-light→deep ESCALATION rule.
+  # The rule must be tied to an EMPTY light result (the trigger condition), not a
+  # bare mention, and must NOT weaken arm (a2)'s explicit-only/never-reflex tokens
+  # (which the escalation is scoped under — user-asked branch only). Scoped to the
+  # description value so body prose cannot green it vacuously. Non-vacuous: the
+  # pre-#528 description named neither token, so this was RED before the Doc edit.
+  s129_escal=$(printf '%s' "$s129_desc" | grep -ciE 'escalat' | tr -d ' ')
+  s129_emptytrig=$(printf '%s' "$s129_desc" | grep -ciE 'empty|no match' | tr -d ' ')
   if [ "$s129_usewhen" -ge 1 ] && [ "$s129_userask" -ge 1 ] && [ "$s129_selfid" -ge 1 ] \
      && [ "$s129_deeptok" -ge 1 ] && [ "$s129_explicit" -ge 1 ] \
+     && [ "$s129_escal" -ge 1 ] && [ "$s129_emptytrig" -ge 1 ] \
      && [ "$s129_norm" -ge 1 ] && [ "$s129_ptr" -ge 1 ]; then
-    ok "129: recall-routing disposition — trigger-oriented recall.md description (user-asked + self-identified + deep-on-explicit-intent-only) + thin CLAUDE.md norm → SPEC §5.25 (#520, #524)"
+    ok "129: recall-routing disposition — trigger-oriented recall.md description (user-asked + self-identified + deep-on-explicit-intent-only + empty-light→deep escalation) + thin CLAUDE.md norm → SPEC §5.25 (#520, #524, #528)"
   else
-    ng "129: recall-routing disposition incomplete (usewhen=$s129_usewhen userask=$s129_userask selfid=$s129_selfid deeptok=$s129_deeptok explicit=$s129_explicit norm=$s129_norm ptr=$s129_ptr) (#520, #524)"
+    ng "129: recall-routing disposition incomplete (usewhen=$s129_usewhen userask=$s129_userask selfid=$s129_selfid deeptok=$s129_deeptok explicit=$s129_explicit escal=$s129_escal emptytrig=$s129_emptytrig norm=$s129_norm ptr=$s129_ptr) (#520, #524, #528)"
   fi
 fi
 
