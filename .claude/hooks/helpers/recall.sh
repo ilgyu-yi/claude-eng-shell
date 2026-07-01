@@ -94,31 +94,55 @@ recall_pointers() {
 
   # DEEP tier (#524) — gated ONLY by --deep (explicit user intent). Off by
   # default: absent the flag this whole block is skipped, so the light tier above
-  # is byte-for-byte unchanged and NO `gh issue view` fetch fires. When on, scan
-  # the COMMENT bodies of the light candidate issues: fetch each candidate's
-  # comments, grep LOCALLY with a FIXED-STRING predicate (`grep -qF`, so dotted
-  # tokens like 3.12 survive), and emit ONLY the pointer of a matched issue —
+  # is byte-for-byte unchanged and NO `gh issue view` fetch fires. When on, run a
+  # SEPARATE candidate search that — unlike the closed-only light tier — INCLUDES
+  # OPEN issues (a decision under active discussion is the high-conviction case,
+  # and open-issue comment threads are unreachable by the light tier). For each
+  # bounded candidate, fetch its comments and match them LOCALLY with a
+  # token-aware FIXED-STRING predicate (`grep -qF` on the whole topic, else any
+  # topic token >= 3 chars, so dotted tokens like 3.12 survive), then emit ONLY
+  # the pointers the light tier did NOT already print (dedup — no double-print) —
   # never the matched comment text. Bounded by RECALL_LIMIT; fail-open per candidate.
-  if [ "$deep" = 1 ] && [ -n "$repo" ] && [ -n "$issues" ]; then
-    local line num bodies dcount=0
-    while IFS= read -r line; do
-      [ -n "$line" ] || continue
-      [ "$dcount" -ge "$limit" ] && break
-      num=$(printf '%s' "$line" | grep -oE '^#[0-9]+' | grep -oE '[0-9]+')
-      [ -n "$num" ] || continue
-      # Comment bodies for this candidate — fetched, never printed. Fail-open:
-      # a gh error yields an empty set and the candidate is silently skipped.
-      bodies=$(gh issue view "$num" --repo "$repo" --json comments \
-        --jq '.comments[].body' 2>/dev/null) || bodies=""
-      [ -n "$bodies" ] || continue
-      # PREDICATE, not printer: match/no-match on the FIXED string only.
-      if printf '%s' "$bodies" | grep -qF -- "$topic"; then
-        printf '%s\n' "$line"   # pointer only — never the matched comment body
-        dcount=$((dcount + 1)); any=1
-      fi
-    done <<EOF
-$issues
+  if [ "$deep" = 1 ] && [ -n "$repo" ]; then
+    local dcands
+    dcands=$(gh search issues "$topic" --repo "$repo" \
+      --limit "$limit" --json number,title --jq '.[] | "#\(.number) \(.title)"' 2>/dev/null) || dcands=""
+    if [ -n "$dcands" ]; then
+      local line num bodies tok matched oldopt dcount=0
+      while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        [ "$dcount" -ge "$limit" ] && break
+        num=$(printf '%s' "$line" | grep -oE '^#[0-9]+' | grep -oE '[0-9]+')
+        [ -n "$num" ] || continue
+        # Dedup: never re-emit a pointer the light tier already printed.
+        printf '%s\n' "$issues" | grep -qxF -- "$line" && continue
+        # Comment bodies for this candidate — fetched, never printed. Fail-open:
+        # a gh error yields an empty set and the candidate is silently skipped.
+        bodies=$(gh issue view "$num" --repo "$repo" --json comments \
+          --jq '.comments[].body' 2>/dev/null) || bodies=""
+        [ -n "$bodies" ] || continue
+        # Token-aware PREDICATE (match/no-match), FIXED-STRING only. Whole topic
+        # first; else split into tokens with globbing disabled (topics are data,
+        # never patterns) and match any token >= 3 chars.
+        matched=0
+        if printf '%s' "$bodies" | grep -qF -- "$topic"; then
+          matched=1
+        else
+          oldopt=$-; set -f
+          for tok in $topic; do
+            [ "${#tok}" -ge 3 ] || continue
+            if printf '%s' "$bodies" | grep -qF -- "$tok"; then matched=1; break; fi
+          done
+          case "$oldopt" in *f*) ;; *) set +f ;; esac
+        fi
+        if [ "$matched" = 1 ]; then
+          printf '%s\n' "$line"   # pointer only — never the matched comment body
+          dcount=$((dcount + 1)); any=1
+        fi
+      done <<EOF
+$dcands
 EOF
+    fi
   fi
 
   [ "$any" = 1 ] || printf 'recall: no matches in the decision record for "%s"\n' "$topic"

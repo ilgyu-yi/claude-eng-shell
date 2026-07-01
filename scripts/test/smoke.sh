@@ -12987,6 +12987,36 @@ else
   printf '%s' "$s131_out" | grep -q '#517' || { s131=0; s131_why="${s131_why}light-pointer-missing;"; }
   rm -f "$s131_marker" 2>/dev/null
   unset -f gh s131_run 2>/dev/null
+
+  # arm (c): WITH --deep — the deep tier must (1) surface a NEW open-issue comment
+  # pointer the closed-only light tier cannot reach, and (2) NEVER double-print a
+  # closed issue the light tier already surfaced (dedup). #524 code-review fix.
+  # Stub distinguishes the light call (--state closed) from the deep call (no
+  # state → open+closed) so the deep candidate set is strictly broader.
+  gh() {
+    case "$*" in
+      *'repo view'*) printf 'smoke-owner/smoke-repo\n' ;;
+      *'search issues'*'--state closed'*) printf '#517 pin toolchain to a fixed version\n' ;;
+      *'search issues'*) printf '#517 pin toolchain to a fixed version\n#8 python interpreter version\n' ;;
+      *'search prs'*) : ;;
+      *'issue view 8 '*|*'issue view 8') printf 'settled on python 3.14 over 3.12\n' ;;
+      *'issue view 517 '*|*'issue view 517') printf 'python discussed in this thread too\n' ;;
+      *'issue view'*) : ;;
+      *) return 0 ;;
+    esac
+  }
+  s131c_run() {
+    RECALL_LIMIT=5; export RECALL_LIMIT
+    . "$S131_HELPER"
+    recall_pointers "python" --deep 2>/dev/null
+  }
+  s131c_out=$(s131c_run)
+  # (1) NEW value: open issue #8 (unreachable by the closed-only light tier) surfaced.
+  printf '%s\n' "$s131c_out" | grep -q '#8 ' || { s131=0; s131_why="${s131_why}deep-open-not-surfaced;"; }
+  # (2) DEDUP / no double-print: the closed issue #517 appears exactly once.
+  s131c_dupes=$(printf '%s\n' "$s131c_out" | grep -c '#517')
+  [ "$s131c_dupes" = 1 ] || { s131=0; s131_why="${s131_why}deep-double-print(#517x$s131c_dupes);"; }
+  unset -f gh s131c_run 2>/dev/null
 fi
 if [ "$s131" = 1 ]; then
   ok "131: /recall deep tier is --deep-gated (off by default), fetches candidate comments (--json comments), fixed-string greps (grep -F), RECALL_LIMIT-bounded (#524)"
