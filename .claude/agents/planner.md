@@ -4,7 +4,7 @@ description: Call before any code edit. Required for changes spanning 3+ files, 
 tools: [Read, Grep, Glob, Bash, WebFetch]
 ---
 
-You are the planner. Called at the start of a work item in claude-eng-shell to produce the markdown that goes into the PR body.
+You are the planner. Called at the start of a work item in GHJig-Claude to produce the markdown that goes into the PR body.
 
 ## Input
 - User request

@@ -1,4 +1,4 @@
-# claude-eng-shell
+# GHJig-Claude
 
 **English** | [한국어](README.ko.md)
 
@@ -10,10 +10,10 @@
 ## Install
 
 ```bash
-git clone <this-repo-url> claude-eng-shell
-cd claude-eng-shell
+git clone <this-repo-url> GHJig-Claude
+cd GHJig-Claude
 ./scripts/bootstrap.sh                 # checks dependencies only — never edits ~/.zshrc
-export PATH="$PWD/bin:$PATH"            # optional — only to run `claude-eng` from any dir (or: alias claude-eng="$PWD/bin/claude-eng")
+export PATH="$PWD/bin:$PATH"            # optional — only to run `ghjig` from any dir (or: alias ghjig="$PWD/bin/ghjig")
 ```
 
 `bootstrap.sh` only verifies dependencies — `git`, `gh`, `jq` are required; `python3` is recommended (several helpers fall back to less-precise behavior without it). It never modifies `~/.zshrc` or any other user-global file.
@@ -22,7 +22,7 @@ export PATH="$PWD/bin:$PATH"            # optional — only to run `claude-eng` 
 
 ```bash
 # Prerequisites: gh auth login (a token that can open PRs + manage issues).
-# What this puts in your repo, and the claude-eng-vs-claude choice, are under
+# What this puts in your repo, and the ghjig-vs-claude choice, are under
 # "Adopting it on your repo" below — read it before the first real run.
 
 # One command — local path or repo URL. setup.sh runs deps check →
@@ -49,9 +49,9 @@ Before the loop above runs cleanly on a real project, four things are worth know
 
 **Prerequisites.** Beyond the `bootstrap.sh` deps (`git` / `gh` / `jq`, `python3` recommended), the GitHub flow needs `gh auth login` with a token that can open PRs and manage issues. Adopting **dir-mode** additionally needs the `project` token scope (the dir-mode GitHub Project is created by `setup_project.sh`) and permission to push workflows (issue/Project mirroring installs `.github/workflows/`). `/onboard` reports what's missing — fix auth before filing the first issue.
 
-**Footprint — what lands in your repo, and what's tracked.** Injection (`clone-into.sh` / `register.sh`) creates **symlinks** under the target's `.claude/`: `eng-shell-root` (→ the canonical shell), `settings.local.json` (→ the shell's injected hooks), and one per `agents/` + `commands/*.md` asset — plus a per-project registry/state dir under `eng-state/`. The shell adds `eng-shell-root`, `settings.local.json`, and `eng-state/` to the target's `.git/info/exclude`, so they never appear in your `git status`; the `agents`/`commands` symlinks point into the shell and are not committed either. A pre-existing **real** file of the same name is *skipped with a warning*, never overwritten — the shell will not clobber an existing `.claude/`.
+**Footprint — what lands in your repo, and what's tracked.** Injection (`clone-into.sh` / `register.sh`) creates **symlinks** under the target's `.claude/`: `ghjig-shell-root` (→ the canonical shell), `settings.local.json` (→ the shell's injected hooks), and one per `agents/` + `commands/*.md` asset — plus a per-project registry/state dir under `ghjig-state/`. The shell adds `ghjig-shell-root`, `settings.local.json`, and `ghjig-state/` to the target's `.git/info/exclude`, so they never appear in your `git status`; the `agents`/`commands` symlinks point into the shell and are not committed either. A pre-existing **real** file of the same name is *skipped with a warning*, never overwritten — the shell will not clobber an existing `.claude/`.
 
-**Invocation — `claude-eng` or plain `claude`.** The `claude-eng` PATH wrapper (from Install) works from anywhere. Inside a registered target you can also just run `claude`: the hooks self-locate the shell through the `.claude/eng-shell-root` binding symlink, so no global `CLAUDE_ENG_SHELL_ROOT` env is needed (SPEC §3.2.1).
+**Invocation — `ghjig` or plain `claude`.** The `ghjig` PATH wrapper (from Install) works from anywhere. Inside a registered target you can also just run `claude`: the hooks self-locate the shell through the `.claude/ghjig-shell-root` binding symlink, so no global `GHJIG_SHELL_ROOT` env is needed (SPEC §3.2.1).
 
 **`/onboard` (one-time, read-only).** Run it right after registering. It reports six checks — upstream/fork, push permission, SSOT files, `.github/`, branch protection, CI — each ✓/✗, makes **no automatic changes**, and ends with recommended next actions. A ✗ (e.g. the repo is a fork, or you lack push permission — the shell is upstream-only) is your cue to fix the environment before `/file-issue`.
 
@@ -98,7 +98,7 @@ The environment refuses what a careful engineer would not do and audit-logs ever
 - **Scope** — Edit/Write, or destructive `rm -rf`/`mv -f`/`cp -f`, against paths outside the registered scope.
 - **Workflow integrity** — `gh pr merge` with unchecked AC (`ac-closeout`) or a non-`--merge` strategy into the default branch (`merge-strategy`); branch creation against a `status:proposed` or Directive Issue (`proposed-protect`); a label that contradicts an Issue's parent-marker (`label-parent-consistency`); and trusted-filer Issue mutations.
 
-Every block is escapable and audit-logged. In the Claude Code Bash tool use the trailing sentinel `<command>  # claude-eng:skip=<category> reason=<why>`; the leading `SKIP_HOOKS=<category> SKIP_REASON='<why>' <command>` env-prefix form works only where it reaches the command string (a real shell, the smoke harness). The full enforcement surface, fail-policy, and tuning mechanisms are in **SPEC §6.1 / §6.5 / §7**.
+Every block is escapable and audit-logged. In the Claude Code Bash tool use the trailing sentinel `<command>  # ghjig:skip=<category> reason=<why>`; the leading `SKIP_HOOKS=<category> SKIP_REASON='<why>' <command>` env-prefix form works only where it reaches the command string (a real shell, the smoke harness). The full enforcement surface, fail-policy, and tuning mechanisms are in **SPEC §6.1 / §6.5 / §7**.
 
 ## Configuration toggles
 
@@ -106,7 +106,7 @@ All optional; per-target state lives under `.claude/state/` (gitignored), env va
 
 ## Versioning
 
-The shell version is a single [semver](https://semver.org) 0.x line in the top-level `VERSION` file (`MAJOR=0` throughout v0); tags are `v` + semver (e.g. `v0.2.0`). `claude-eng --version` prints it — short-circuited before registry/scope resolution, so it works from any cwd. Per [SemVer 2.0 §4](https://semver.org/#spec-item-4), 0.x bumps are informational signals, not contracts; tags are pushed manually by the maintainer after a milestone merges. Per-PR changelog fragments go under `changelog_unreleased/<category>/<N>.md` ([TEMPLATE](changelog_unreleased/TEMPLATE.md)), and `/release <X.Y.Z>` consolidates them into [CHANGELOG.md](CHANGELOG.md). Full contract: SPEC §18.
+The shell version is a single [semver](https://semver.org) 0.x line in the top-level `VERSION` file (`MAJOR=0` throughout v0); tags are `v` + semver (e.g. `v0.2.0`). `ghjig --version` prints it — short-circuited before registry/scope resolution, so it works from any cwd. Per [SemVer 2.0 §4](https://semver.org/#spec-item-4), 0.x bumps are informational signals, not contracts; tags are pushed manually by the maintainer after a milestone merges. Per-PR changelog fragments go under `changelog_unreleased/<category>/<N>.md` ([TEMPLATE](changelog_unreleased/TEMPLATE.md)), and `/release <X.Y.Z>` consolidates them into [CHANGELOG.md](CHANGELOG.md). Full contract: SPEC §18.
 
 ## Docs
 

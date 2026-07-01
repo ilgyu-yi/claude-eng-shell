@@ -1,4 +1,4 @@
-<!-- Install as .github/PULL_REQUEST_TEMPLATE.md in the target repo. claude-eng-shell's /onboard suggests this when absent. -->
+<!-- Install as .github/PULL_REQUEST_TEMPLATE.md in the target repo. GHJig-Claude's /onboard suggests this when absent. -->
 
 Closes #
 

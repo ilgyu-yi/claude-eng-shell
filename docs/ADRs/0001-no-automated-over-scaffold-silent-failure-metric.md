@@ -42,5 +42,5 @@ The spike therefore confirms its own motivating thesis: the silent side is invis
 ## Notes
 
 - Spike issue: #420. Author-side gate: `issue-reviewer` (ship). Observer-side gate: `activation-reviewer` (pass).
-- Measurements gathered via `git log`/`git rev-list`/`gh issue list`/`gh pr list` over the repo at 2026-06-22 and the per-project audit log `.claude/eng-state/audit/audit.jsonl`.
+- Measurements gathered via `git log`/`git rev-list`/`gh issue list`/`gh pr list` over the repo at 2026-06-22 and the per-project audit log `.claude/ghjig-state/audit/audit.jsonl`.
 - Related instrumentation (loud side): `scripts/narrowing_candidates.sh`, `scripts/promotion_candidates.sh`; reviewer-reject audit records (Directive #356); MISSION "The mechanism" (enforcement dual / deferred positive face); SPEC §6.0 (cost-asymmetry face selection).

@@ -1,11 +1,11 @@
-# MISSION — claude-eng-shell
+# MISSION — GHJig-Claude
 
-> Canonical long-term direction for claude-eng-shell.
+> Canonical long-term direction for GHJig-Claude.
 > Every Directive's `## MISSION fit` field references a section of this file.
 
 ## What this exists for
 
-claude-eng-shell is the engineering scaffold a single Claude Code agent (or human + Claude pair) lives inside to do work on a GitHub-standard repository. It captures the procedural discipline of senior engineering — issue → branch → draft PR → reviewed commits → ready merge — and renders it as hooks, slash commands, subagents, and audit trails that an AI agent cannot drift past without leaving evidence.
+GHJig-Claude is the engineering scaffold a single Claude Code agent (or human + Claude pair) lives inside to do work on a GitHub-standard repository. It captures the procedural discipline of senior engineering — issue → branch → draft PR → reviewed commits → ready merge — and renders it as hooks, slash commands, subagents, and audit trails that an AI agent cannot drift past without leaving evidence.
 
 ## The mechanism
 
@@ -17,7 +17,7 @@ The mechanism cuts two ways: **narrowing** pushes irrelevant material out (phasi
 
 **Enforcement is the action-side counterpart of this dual — a parallel pair on a genuinely separate axis, not a projection of it.** It is a *separate* axis because the two can locally **oppose**: a negative block grows the working context exactly when narrowing would shrink it — the refusal message, the retry, and the audit line all accrete — so enforcement cannot be *derived* from the perception dual, only run alongside it. The shell shapes not only what the agent *sees* but what it may *do*, and that shaping wears the same two faces: *negative* enforcement refuses a wrong action (a protected-branch commit, a force-push, a leaked secret), and *positive* enforcement supplies the right next one (the `next:` hint, a slash command that scaffolds the whole flow, a reviewer that produces an artifact, not only a verdict on it). Neither suffices alone — negative-only enforcement walls the agent in with no door (blocked, never guided to the alternative), positive-only enforcement lays a path but leaves nothing to keep the agent on it (guidance it can drift past). Which face a rule wears is decided by the **asymmetry in the cost of being wrong**: where a wrong *allow* is irreversible or corrupts shared history (a force-push onto a protected branch, a leaked secret, a destructive `rm`), the rule is a hard negative gate that fails safe toward blocking; where a wrong *nudge* is simply ignored at no cost, the rule is positive and can be laid generously. And the face is not fixed — a rule is typically born as advisory guidance, hardened into a hook once the pattern proves out, and narrowed again if it begins to fight the prescribed flow; that migration is one of the concrete ways the shell *improves under use*. A proposal that adds a hard block without naming the right alternative, or guidance with no gate behind it, is a one-sided regression in the same sense a context proposal that only narrows or only injects is. And positive enforcement itself has two faces in time: the *in-band* message a block emits is its immediate positive face, while the line it writes to the audit log is a *deferred* positive face — latent until a consumer is wired to read the aggregate, at which point the log becomes the channel through which the shell sees its own friction and improves under use. (Implementation: SPEC §6.0.)
 
-**Isolation model — shared code, per-project state.** The shell runs as *one shared canonical codebase across many projects*: the code, SPEC, and norms are a single source that every bound project resolves **live** (each project carries a per-project binding to the canonical root, not a copy), so a friction-fix made once **propagates to all bound projects** on their next session — the shell improves under use and no project is pinned to a stale version. What isolates per project is only the **ephemeral state**: the audit log, caches, and scope registry under that project's own `eng-state/`, plus the session and Claude Code's native per-project memory. This is the structural expression of the two-sided mechanism — the shared substrate is the durable memory selective injection draws from; the per-project state is the narrowed, task-and-project-scoped surface. (Implementation: SPEC §1.7, §3.2.)
+**Isolation model — shared code, per-project state.** The shell runs as *one shared canonical codebase across many projects*: the code, SPEC, and norms are a single source that every bound project resolves **live** (each project carries a per-project binding to the canonical root, not a copy), so a friction-fix made once **propagates to all bound projects** on their next session — the shell improves under use and no project is pinned to a stale version. What isolates per project is only the **ephemeral state**: the audit log, caches, and scope registry under that project's own `ghjig-state/`, plus the session and Claude Code's native per-project memory. This is the structural expression of the two-sided mechanism — the shared substrate is the durable memory selective injection draws from; the per-project state is the narrowed, task-and-project-scoped surface. (Implementation: SPEC §1.7, §3.2.)
 
 Directives should be evaluated against this two-sided principle, not against abstract quality — a proposal that bloats context past the task is regression, but so is a proposal that strips context-loading past the task. Both failure modes are well-documented; both are equally costly.
 
@@ -26,8 +26,8 @@ Directives should be evaluated against this two-sided principle, not against abs
 Twelve months out, the shell's success is best summarized as **a Claude Code session running in `unattended` mode against a real engineering issue produces a merged PR whose quality matches what a careful senior engineer would have produced in the same hours.** That requires:
 
 - **The flow holds in unattended runs.** Clean execution end-to-end (issue → branch → Doc → Test → Code → /ship → merge) is the dominant path, not the exception. Hard blockers (incompatible plan, secret detected, AC unticked) surface as audit-logged `parked` states rather than silent regressions.
-- **The directing layer works.** A team that picks up claude-eng-shell uses the dir-mode hierarchy (`MISSION.md` → Directive Issue → Execution Issue) to plan two or three weeks of work, ship it under reviewer gates, and reach the Directive's success signals without revising the shell. claude-eng-shell itself is the first concrete example.
-- **Multiple repos run on it.** At least two unrelated upstream repos — beyond claude-eng-shell itself — adopt the shell as their canonical Claude Code workflow. Each contributes friction back into the SPEC.
+- **The directing layer works.** A team that picks up GHJig-Claude uses the dir-mode hierarchy (`MISSION.md` → Directive Issue → Execution Issue) to plan two or three weeks of work, ship it under reviewer gates, and reach the Directive's success signals without revising the shell. GHJig-Claude itself is the first concrete example.
+- **Multiple repos run on it.** At least two unrelated upstream repos — beyond GHJig-Claude itself — adopt the shell as their canonical Claude Code workflow. Each contributes friction back into the SPEC.
 - **The escape hatch stays narrow.** Audit-log queries (`/audit`) show that bypasses (`SKIP_HOOKS=...`) cluster in the small set of legitimate cases the SPEC names — not as a normalized routing around inconvenient gates.
 - **The v1+ orchestrator lands.** Automatic mode-switching between eng-mode and dir-mode, kill-switches, and budget controls (SPEC §0.4) ship after v0 operating experience surfaces the right design for them.
 
@@ -61,7 +61,7 @@ Secondary users include teams adopting AI-assisted engineering more broadly, who
 ## Stakeholders
 
 - **Author**: ilgyu-yi (primary engineer + dogfooder).
-- **Future users**: any engineer adopting claude-eng-shell as their Claude Code workflow.
+- **Future users**: any engineer adopting GHJig-Claude as their Claude Code workflow.
 - **AI agents**: the shell is the operating environment Claude Code reads from; the SPEC is the contract Claude Code is held to.
 
 ---
