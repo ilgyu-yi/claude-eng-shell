@@ -107,6 +107,28 @@ recall_pointers() {
     local dcands
     dcands=$(gh search issues "$topic" --repo "$repo" \
       --limit "$limit" --json number,title --jq '.[] | "#\(.number) \(.title)"' 2>/dev/null) || dcands=""
+    # #526: the whole-topic candidate search above uses `gh search` free-text AND
+    # semantics — a multi-token natural-language phrase whose tokens do NOT co-occur
+    # in any single issue's title/body yields 0 candidates, and the OR-tolerant
+    # stage-2 predicate below (which only runs on candidates) is then unreachable.
+    # Fall back to the SAME token-aware sweep stage 2 uses: re-query per high-signal
+    # token (>= 3 chars, globbing off so tokens stay data), merge + dedup, cap at
+    # RECALL_LIMIT — making stage 1 symmetric with the predicate it feeds rather than
+    # strictly narrower. Fires ONLY on the 0-candidate path; each query is fail-open.
+    if [ -z "$dcands" ]; then
+      local dtok dhit doldopt
+      doldopt=$-; set -f
+      for dtok in $topic; do
+        [ "${#dtok}" -ge 3 ] || continue
+        dhit=$(gh search issues "$dtok" --repo "$repo" \
+          --limit "$limit" --json number,title --jq '.[] | "#\(.number) \(.title)"' 2>/dev/null) || dhit=""
+        [ -n "$dhit" ] && dcands=$(printf '%s\n%s' "$dcands" "$dhit")
+      done
+      case "$doldopt" in *f*) ;; *) set +f ;; esac
+      # Dedup accumulated candidate lines (a token in multiple issues, or multiple
+      # tokens hitting one issue, must not multiply candidates) and keep the bound.
+      dcands=$(printf '%s\n' "$dcands" | grep -v '^[[:space:]]*$' | awk '!seen[$0]++' | head -n "$limit")
+    fi
     if [ -n "$dcands" ]; then
       local line num bodies tok matched oldopt dcount=0
       while IFS= read -r line; do
