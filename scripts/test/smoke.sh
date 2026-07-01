@@ -13184,6 +13184,96 @@ else
   ng "110: README assertion floor (${readme_floor:-unparsed}) overstates live PASS ($PASS) or is unparseable (#409)"
 fi
 
+# ---------- §133: GHJig-Claude identity guard (#533) ----------
+# Assert ZERO legacy identity identifiers survive in tracked code+prose after the
+# claude-eng-shell -> GHJig-Claude rename. Every forbidden token below is built
+# from string fragments ("A""B") so this guard's OWN source carries no literal
+# legacy token to self-match — the same anti-vacuity discipline as the head
+# comment, and it also keeps the Code-phase sed from rewriting the guard's
+# patterns (the fragment breaks the contiguous match). Excludes the changelog
+# surfaces (CHANGELOG.md dated history + changelog_unreleased/ fragments) — both
+# legitimately name the OLD identifiers to describe the migration, and both are
+# prose/history, not live code (owner decision #533). Everything else, including
+# this file's own real identifiers, is scanned and must be renamed.
+s533_forbidden=(
+  "CLAUDE_""ENG_"
+  "ENG_""STATE_DIR_OVERRIDE"
+  "eng""-shell-root"
+  "eng""-state"
+  "eng""_commit"
+  "eng""_skip"
+  "eng""_state_dir"
+  "eng""_registry_file"
+)
+# Bare command / display token, matched case-insensitively — a strict superset
+# that also catches the display name, the bin/ path form, the skip sentinel, and
+# the banner/anchor forms in one pattern (#533 correctness challenger).
+s533_ci_token="claude""-eng"
+
+s533_files=0
+s533_hits=""
+while IFS= read -r s533_f; do
+  [ "$s533_f" = "CHANGELOG.md" ] && continue
+  case "$s533_f" in changelog_unreleased/*) continue ;; esac
+  [ -f "$SHELL_ROOT/$s533_f" ] || continue
+  s533_files=$((s533_files+1))
+  for s533_tok in "${s533_forbidden[@]}"; do
+    if LC_ALL=C grep -qF -- "$s533_tok" "$SHELL_ROOT/$s533_f"; then
+      s533_hits="${s533_hits}${s533_f}[${s533_tok}] "
+    fi
+  done
+  if LC_ALL=C grep -qiF -- "$s533_ci_token" "$SHELL_ROOT/$s533_f"; then
+    s533_hits="${s533_hits}${s533_f}[cmd] "
+  fi
+done < <(git -C "$SHELL_ROOT" ls-files)
+
+# Non-vacuity: the scan must have covered the real tree (188 tracked files at
+# authoring; floor well below that so benign growth/shrink can't trip it), else
+# an empty git ls-files would green vacuously.
+if [ "$s533_files" -lt 150 ]; then
+  ng "133a: identity guard scanned only $s533_files files (<150) — scan is vacuous, cannot trust a clean result (#533)"
+elif [ -z "$s533_hits" ]; then
+  ok "133a: no legacy identity token survives across $s533_files tracked files (#533)"
+else
+  ng "133a: legacy identity token(s) survive: $s533_hits (#533)"
+fi
+
+# §133b (robustness challenger R1): the dogfood settings.json must resolve every
+# hook command via \${CLAUDE_PROJECT_DIR} and carry NO *_SHELL_ROOT on the hook
+# hot path — that decoupling is what keeps enforcement armed through an in-place
+# rename of the env var (SPEC §3.2.1, #533).
+s533_settings="$SHELL_ROOT/.claude/settings.json"
+if [ -f "$s533_settings" ]; then
+  s533_cmds=$(grep -c '"command"' "$s533_settings")
+  s533_cpd=$(grep -cF '{CLAUDE_PROJECT_DIR}/.claude/hooks/' "$s533_settings")
+  s533_root=$(grep -cF '_SHELL_ROOT' "$s533_settings")
+  if [ "$s533_cmds" -ge 5 ] && [ "$s533_cpd" = "$s533_cmds" ] && [ "$s533_root" = 0 ]; then
+    ok "133b: settings.json hook commands all resolve via \${CLAUDE_PROJECT_DIR}, none via *_SHELL_ROOT (cmds=$s533_cmds) (#533)"
+  else
+    ng "133b: settings.json hook-command resolution wrong: commands=$s533_cmds project-dir=$s533_cpd shell-root=$s533_root (want cpd==cmds, root==0) (#533)"
+  fi
+else
+  ng "133b: .claude/settings.json missing (#533)"
+fi
+
+# §133c (correctness challenger): positively pin the NEW display-name casing in
+# the canonical title spots (a negative-only guard cannot catch an inconsistent
+# NEW casing). Deliberately narrow to the title/prose of canonical docs — a
+# global negative scan for mis-cased 'ghjig-claude' would false-positive on the
+# legitimate lowercase repo slug in every github.com/ilgyu-yi/ghjig-claude URL
+# (#533 plan-deviation, recorded in the PR).
+s533_cas_why=""
+for s533_doc in "README.md" "README.ko.md" "MISSION.md" "SPEC.md" ".claude/CLAUDE.md"; do
+  if ! grep -qF -- "GHJig-Claude" "$SHELL_ROOT/$s533_doc" 2>/dev/null; then
+    s533_cas_why="${s533_cas_why}${s533_doc}; "
+  fi
+done
+if [ -z "$s533_cas_why" ]; then
+  ok "133c: canonical display name 'GHJig-Claude' present in README/README.ko/MISSION/SPEC/CLAUDE.md (#533)"
+else
+  ng "133c: canonical display name 'GHJig-Claude' missing or mis-cased in: $s533_cas_why (#533)"
+fi
+
 # ---------- results ----------
 echo
 echo "smoke: pass=$PASS fail=$FAIL"
