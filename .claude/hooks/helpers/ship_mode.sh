@@ -18,8 +18,8 @@ resolve_mode() {
 
   if [ -n "$flag_val" ]; then
     raw="$flag_val"; surface="flag"
-  elif [ -n "${CLAUDE_ENG_SHELL_MODE:-}" ]; then
-    raw="$CLAUDE_ENG_SHELL_MODE"; surface="env"
+  elif [ -n "${GHJIG_SHELL_MODE:-}" ]; then
+    raw="$GHJIG_SHELL_MODE"; surface="env"
   elif [ -f .claude/state/mode ]; then
     raw=$(head -c 64 .claude/state/mode 2>/dev/null | tr -d '[:space:]')
     surface="file"
@@ -116,7 +116,7 @@ ship_decide_post_ready() {
 # On a repeat park (label already present from a previous park):
 #   Stdout: empty.
 #   Side effect: appends one `park-suppressed: <reason>` line to the log.
-# Default log path: $CLAUDE_ENG_SHELL_ROOT/.claude/state/unattended-park.log.
+# Default log path: $GHJIG_SHELL_ROOT/.claude/state/unattended-park.log.
 #
 # Cwd requirement: the label check uses `gh pr view --json labels` with no
 # explicit PR identifier, so `gh`'s branch→PR detection picks the current
@@ -125,9 +125,9 @@ ship_decide_post_ready() {
 # `cd` first or extend this helper to accept an explicit PR number.
 ship_park_pr() {
   local reason="${1:-unspecified}"
-  local esd; esd=$(eng_state_dir 2>/dev/null || true)   # per-project (#314)
+  local esd; esd=$(ghjig_state_dir 2>/dev/null || true)   # per-project (#314)
   local log_path="${SHIP_PARK_LOG_PATH:-${esd:+$esd/unattended-park.log}}"
-  [ -n "$log_path" ] || log_path="$CLAUDE_ENG_SHELL_ROOT/.claude/state/unattended-park.log"
+  [ -n "$log_path" ] || log_path="$GHJIG_SHELL_ROOT/.claude/state/unattended-park.log"
   local ts
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 

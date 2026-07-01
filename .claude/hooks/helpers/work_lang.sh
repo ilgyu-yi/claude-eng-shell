@@ -10,9 +10,9 @@
 # configures or translates.
 #
 # Precedence (high → low), mirroring resolve_mode (helpers/ship_mode.sh):
-#   1. $CLAUDE_ENG_WORK_LANG env var
+#   1. $GHJIG_WORK_LANG env var
 #   2. .claude/state/work-lang per-target file (cwd-relative — read exactly as
-#      resolve_mode reads .claude/state/mode; config tier, NOT eng-state)
+#      resolve_mode reads .claude/state/mode; config tier, NOT ghjig-state)
 #   3. default `en`
 #
 # Any non-empty code is returned VERBATIM (no closed enum — generalizes to any
@@ -21,8 +21,8 @@
 # set -u-safe; no external calls beyond head/tr.
 resolve_work_lang() {
   local raw="" surface=""
-  if [ -n "${CLAUDE_ENG_WORK_LANG:-}" ]; then
-    raw="$CLAUDE_ENG_WORK_LANG"; surface="env"
+  if [ -n "${GHJIG_WORK_LANG:-}" ]; then
+    raw="$GHJIG_WORK_LANG"; surface="env"
   elif [ -f .claude/state/work-lang ]; then
     raw=$(head -c 64 .claude/state/work-lang 2>/dev/null); surface="file"
   fi

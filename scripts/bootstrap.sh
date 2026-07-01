@@ -4,7 +4,7 @@ set -euo pipefail
 # Checks the shell environment only — never modifies user-global files (~/.zshrc, ~/.claude, etc.).
 
 SHELL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-export CLAUDE_ENG_SHELL_ROOT="$SHELL_ROOT"
+export GHJIG_SHELL_ROOT="$SHELL_ROOT"
 
 ok() { printf '✓ %s\n' "$1"; }
 warn() { printf '⚠ %s\n' "$1" >&2; }
@@ -50,13 +50,13 @@ fi
 
 # Install guidance (no auto-install).
 # Shell aliases live in the user's interactive rc and are invisible to this
-# subprocess, so we don't try to detect "is claude-eng accessible" — that check
+# subprocess, so we don't try to detect "is ghjig accessible" — that check
 # only sees PATH and would false-alarm on the alias path (#4). Always surface
 # both options as info; the user picks one and edits their own rc.
-ok "claude-eng wrapper: $SHELL_ROOT/bin/claude-eng"
-info "to invoke as 'claude-eng', pick one (your rc, not ours):"
+ok "ghjig wrapper: $SHELL_ROOT/bin/ghjig"
+info "to invoke as 'ghjig', pick one (your rc, not ours):"
 info "    - add $SHELL_ROOT/bin to PATH (visible to subprocesses)"
-info "    - or: alias claude-eng=$SHELL_ROOT/bin/claude-eng (per-shell; bootstrap can't see it)"
+info "    - or: alias ghjig=$SHELL_ROOT/bin/ghjig (per-shell; bootstrap can't see it)"
 
 if [ "${FAILED:-0}" = 1 ]; then
   echo
