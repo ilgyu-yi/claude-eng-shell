@@ -82,7 +82,7 @@ git pull --ff-only
 MERGE_SHA=$(git rev-parse HEAD)
 awk '/^## \[<X.Y.Z>\]/{f=1; next} /^## \[/{f=0} f' CHANGELOG.md > /tmp/release-notes-v<X.Y.Z>.md
 gh release create v<X.Y.Z> --title v<X.Y.Z> --target "$MERGE_SHA" --notes-file /tmp/release-notes-v<X.Y.Z>.md
-"$GHJIG_SHELL_ROOT/scripts/release_verify.sh" <X.Y.Z>   # confirms the tag + Release-with-notes landed
+"$GHJIG_ROOT/scripts/release_verify.sh" <X.Y.Z>   # confirms the tag + Release-with-notes landed
 ```
 
 **No `--verify-tag`** (#448): that flag *aborts* `gh release create` unless the tag already exists, but the tag and Release are created **together** here (the tag is made from `--target`), so `--verify-tag` would always abort on a fresh release. Omitting it lets `gh release create` make both.

@@ -70,7 +70,7 @@ Don't re-run an exploration in `explorer` that the main assistant already did.
 - Recommended: assemble the commit via `ghjig_commit <type> <issue> "<subject>" [body…]` (`helpers/ghjig_commit.sh`, SPEC §10.2) — validates the subject before committing + array-argv build avoids multibyte/multiline `-m` pitfalls. Offered, not forced; the commit-format hook stays the net.
 
 ## What hooks enforce
-Pointer index — every contract below lives in full in SPEC §6.1 (PreToolUse matcher table + `safe_source` fail-policy table), with the binding/state/banner items in §3.2.1, §3.2.2, and §6.5(c). Enforcement-style face (negative block vs positive guide) is chosen by cost-asymmetry — SPEC §6.0.
+Pointer index — full contracts in SPEC §6.1 (PreToolUse matcher table + `safe_source` fail-policy table); binding/state/banner items in §3.2.1, §3.2.2, §6.5(c). Enforcement face (block vs guide) is chosen by cost-asymmetry — SPEC §6.0.
 
 - **protected-branch** — direct commit/push to `main`/`master`/`release/*` blocked; the **Stage-0 exception** lets `/bootstrap-repo` seed an unborn HEAD (SPEC §6.1, §5.0).
 - **force-push** — force-push allowed only to an explicitly-named non-protected branch; protected-named or bare/remote-only blocked; `--amend` after push and `--no-verify` blocked (SPEC §6.1).
@@ -78,11 +78,11 @@ Pointer index — every contract below lives in full in SPEC §6.1 (PreToolUse m
 - **ac-closeout** — `gh pr merge` blocked when a linked issue has unchecked AC items and no `## AC closeout` marker comment yet (SPEC §6.1).
 - **merge-strategy** — `gh pr merge` to the default branch blocked unless the strategy is `--merge` (SPEC §6.1, §5.7.1).
 - **sensitive-file** — Edit/Write on `.env`, `*.pem`, `credentials*`, `id_rsa*`, `id_ed25519*` blocked, including under both carve-outs (SPEC §6.1).
-- **out-of-scope (Edit/Write)** — Edit/Write outside the registry blocked, except the two carve-outs `$GHJIG_SHELL_ROOT/` and `$HOME/.claude/` (SPEC §6.1).
+- **out-of-scope (Edit/Write)** — Edit/Write outside the registry blocked, except the two carve-outs `$GHJIG_ROOT/` and `$HOME/.claude/` (SPEC §6.1).
 - **out-of-scope (destructive)** — `rm`/`mv`/`cp` with a force/recursive flag in any surface form and out-of-registry args blocked; no carve-out (SPEC §6.1).
-- **shell-root resolution** — hooks resolve the shell via `$GHJIG_SHELL_ROOT` else self-locate through the per-project `.claude/ghjig-root` binding symlink, so a plain `claude` in a target needs no global env (SPEC §3.2.1).
+- **shell-root resolution** — hooks self-locate via `BASH_SOURCE` through the per-project `.claude/ghjig-root` symlink and export `GHJIG_ROOT` (internal; ambient never consulted; `GHJIG_ROOT_OVERRIDE` = test seam) — a plain `claude` needs no global env (SPEC §3.2.1).
 - **per-project state** — audit log, caches, and the scope-guard registry resolve per-project under `ghjig-state/` (`ghjig_state_dir`/`ghjig_registry_file`); missing/empty registry fails open (SPEC §3.2.2).
-- **SessionStart banner** — surfaces the detectable silent-no-op states (runtime `hookrt.sh` missing; and a present-but-empty scope registry that silently disarms enforcement, #502) via a once-per-session banner naming the fix (SPEC §6.5(c)).
+- **SessionStart banner** — surfaces detectable silent-no-op states (missing `hookrt.sh`; empty scope registry, #502; ambient legacy `GHJIG_SHELL_ROOT`/mismatched `GHJIG_ROOT` export — retired, ignored; active `GHJIG_ROOT_OVERRIDE` seam, #537) once per session, naming the fix (SPEC §6.5(c)).
 - **safe_source** — every helper source (hook-to-helper and helper-to-helper) goes through `safe_source`, fail-open with `audit_log warn <category> helper-missing` on miss (SPEC §6.1 fail-policy table).
 - **pass-through invariant** — every matcher reaches a decided state per fire; happy paths `mark_allow` silently, anomalous silent fall-through is caught by `pass_through_trace` (SPEC §6.1).
 - **audit observability** — records carry an additive `source` field (`test` only via the harness-owned, uninjectable marker) and reviewers emit a categorized reject record; both observability surfaces, not gates (SPEC §6.1).
